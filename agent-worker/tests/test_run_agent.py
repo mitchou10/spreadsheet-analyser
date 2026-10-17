@@ -176,7 +176,7 @@ def test_agent_plans_first_then_answers_the_last_message_with_history() -> None:
         "/runs/r1/complete",
     ]
     assert all(auth == "Bearer secret" for *_, auth in calls)
-    assert last_body(calls) == {"content": "Voici le résumé."}
+    assert last_body(calls)["content"] == "Voici le résumé."
 
     plan_call, answer_call = llm.calls
     # Planning sees the usable history (system/empty messages dropped), the scope, and which files exist...
@@ -229,7 +229,7 @@ def test_agent_searches_the_analyses_then_answers_from_what_it_found() -> None:
 
     assert run(make_client(calls), llm) == "completed"
 
-    assert last_body(calls) == {"content": "Le montant HT va de 1 à 99 (ventes_2024.xlsx, feuille Ventes)."}
+    assert last_body(calls)["content"] == "Le montant HT va de 1 à 99 (ventes_2024.xlsx, feuille Ventes)."
     assert len(llm.calls) == 4  # plan + 3 agent turns
     seen = tool_outputs(llm)
     search_result = json.loads(seen[0])
@@ -242,6 +242,52 @@ def test_agent_searches_the_analyses_then_answers_from_what_it_found() -> None:
     # the tool exchange is replayed to the model in order: its call, then the result
     last_turn = llm.calls[-1]
     assert [m.type for m in last_turn[-4:]] == ["ai", "tool", "ai", "tool"]
+
+
+def test_the_answer_is_sent_with_a_trace_of_the_plan_the_files_and_the_tool_calls() -> None:
+    calls: list = []
+    llm = FakeLLM(
+        "1. Chercher le montant",
+        tool_call("search", query="montant"),
+        tool_call("describe_column", "c2", file="f1", column="montant ht"),
+        "Réponse.",
+    )
+
+    assert run(make_client(calls), llm) == "completed"
+
+    trace = last_body(calls)["trace"]
+    assert trace["plan"] == "1. Chercher le montant"
+    assert [(f["file_name"], f["collection_name"]) for f in trace["files"]] == [
+        ("ventes_2024.xlsx", "Commercial"),
+        ("rh.csv", "RH"),
+    ]
+    assert [(s["tool"], s["arguments"]) for s in trace["steps"]] == [
+        ("search", {"query": "montant"}),
+        ("describe_column", {"file": "f1", "column": "montant ht"}),
+    ]
+    assert json.loads(trace["steps"][1]["output"])["name"] == "Montant_HT"
+
+
+def test_a_very_long_tool_output_is_cut_in_the_trace_but_not_for_the_model(monkeypatch) -> None:
+    from app.agent import graph
+
+    monkeypatch.setattr(graph, "MAX_TRACE_OUTPUT_CHARS", 20)
+    calls: list = []
+    llm = FakeLLM("plan", tool_call("search", query="montant"), "ok")
+
+    assert run(make_client(calls), llm) == "completed"
+
+    shown = last_body(calls)["trace"]["steps"][0]["output"]
+    assert shown.endswith("… (tronqué)") and len(shown) < 60
+    assert len(tool_outputs(llm)[0]) > 60  # the model saw everything
+
+
+def test_an_answer_without_tool_calls_has_an_empty_list_of_steps() -> None:
+    calls: list = []
+
+    assert run(make_client(calls), FakeLLM("plan", "Salut")) == "completed"
+
+    assert last_body(calls)["trace"]["steps"] == []
 
 
 def test_a_tool_error_is_given_back_to_the_model_not_raised() -> None:
@@ -270,7 +316,7 @@ def test_the_model_is_forced_to_conclude_after_too_many_tool_calls() -> None:
 
     assert run(make_client(calls), llm) == "completed"
 
-    assert last_body(calls) == {"content": "Réponse finale malgré tout."}
+    assert last_body(calls)["content"] == "Réponse finale malgré tout."
     assert "tous tes appels d'outils" in llm.calls[-1][-1].content
 
 
