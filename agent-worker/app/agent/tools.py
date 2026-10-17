@@ -1,11 +1,13 @@
 import json
 from collections.abc import Callable
+from typing import Literal
 
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
 from app.agent.account import Account
 from app.agent.catalog import Catalog, CatalogError
+from app.agent.chart import ChartRunner
 from app.agent.sql import SqlRunner
 from app.backend_client import BackendError
 
@@ -56,8 +58,69 @@ class QueryDataArgs(BaseModel):
     )
 
 
+class CreateChartArgs(BaseModel):
+    query_id: str = Field(
+        description="Le `query_id` rendu par query_data : le graphique représente le résultat de cette requête."
+    )
+    type: Literal["bar", "barh", "line", "area", "pie", "scatter", "histogram"] = Field(
+        description="bar (barres), barh (barres horizontales : noms longs, classements), line (évolution), area, "
+        "pie (parts d'un tout, peu de parts), scatter (deux nombres), histogram (répartition d'une colonne numérique)."
+    )
+    x: str = Field(
+        description="Colonne du résultat : catégories (bar, pie), axe horizontal (line, area, scatter) ou valeurs."
+    )
+    y: list[str] | None = Field(
+        default=None,
+        description="Colonne(s) numérique(s) à tracer (jusqu'à 6). Inutile pour un histogram ; un seul pour pie.",
+    )
+    color: str | None = Field(
+        default=None,
+        description="Colonne dont chaque valeur fait une série (avec un seul `y`), au lieu de plusieurs `y`.",
+    )
+    title: str = Field(
+        description="Titre du graphique, en français, qui dit ce qu'on voit (ex : « Ventes par région en 2024 »)."
+    )
+    x_label: str | None = Field(default=None, description="Légende de l'axe horizontal (défaut : nom de la colonne).")
+    y_label: str | None = Field(
+        default=None, description="Légende de l'axe vertical (ex : « Chiffre d'affaires (€) »)."
+    )
+    stacked: bool = Field(default=False, description="Empiler les séries (bar, area).")
+    sort: Literal["none", "x", "y_desc", "y_asc"] = Field(
+        default="none",
+        description="Ordre des catégories : tel que rendu, par x, ou par valeur décroissante/croissante.",
+    )
+
+
 class NoArgs(BaseModel):
     pass
+
+
+def _draw_chart(
+    runner: ChartRunner,
+    query_id: str,
+    type: str,
+    x: str,
+    title: str,
+    y=None,
+    color=None,
+    x_label=None,
+    y_label=None,
+    stacked=False,
+    sort="none",
+) -> dict:  # noqa: A002
+    """The description of the chart (kind, columns, title...) for the backend: only what was given."""
+    given = {
+        "type": type,
+        "x": x,
+        "y": y or [],
+        "color": color,
+        "title": title,
+        "x_label": x_label,
+        "y_label": y_label,
+        "stacked": stacked,
+        "sort": sort,
+    }
+    return runner.run(query_id, {key: value for key, value in given.items() if value not in (None, [])})
 
 
 def _render(payload) -> str:
@@ -71,7 +134,10 @@ def _render(payload) -> str:
 
 
 def build_tools(
-    get_catalog: Callable[[], Catalog], get_account: Callable[[], Account], get_sql: Callable[[], SqlRunner]
+    get_catalog: Callable[[], Catalog],
+    get_account: Callable[[], Account],
+    get_sql: Callable[[], SqlRunner],
+    get_chart: Callable[[], ChartRunner],
 ) -> list[StructuredTool]:
     """The agent's tools. `get_catalog` and `get_account` are called at use time: the analyses are loaded once the
     run has started, and the account (a call to the backend) only if the agent asks about it.
@@ -143,6 +209,19 @@ def build_tools(
             lambda runner, sql, files=None: runner.run(sql, files),
         ),
     ]
+    chart_specs = [
+        (
+            "create_chart",
+            "Dessine un GRAPHIQUE à partir du résultat d'une requête déjà faite avec query_data (barres, barres "
+            "horizontales, courbe, aires, camembert, nuage de points, histogramme). D'abord la requête, qui prépare "
+            "les données (agrégées, triées, 40 catégories au plus), ensuite le graphique : passe son `query_id` et "
+            "nomme les colonnes du résultat. Plusieurs graphiques sont possibles dans une réponse (6 au plus). "
+            "Rend le markdown de l'image : insère-le tel quel dans ta réponse. Les graphiques servent à montrer, "
+            "pas à décorer : n'en fais que si la question s'y prête ou si on te le demande.",
+            CreateChartArgs,
+            _draw_chart,
+        ),
+    ]
     account_specs = [
         (
             "account_overview",
@@ -167,6 +246,11 @@ def build_tools(
         StructuredTool.from_function(
             func=guarded(function, source), name=name, description=description, args_schema=schema
         )
-        for specs_, source in ((specs, get_catalog), (sql_specs, get_sql), (account_specs, get_account))
+        for specs_, source in (
+            (specs, get_catalog),
+            (sql_specs, get_sql),
+            (chart_specs, get_chart),
+            (account_specs, get_account),
+        )
         for name, description, schema, function in specs_
     ]

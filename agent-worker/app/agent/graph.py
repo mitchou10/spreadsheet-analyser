@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from app.agent.account import Account
 from app.agent.catalog import Catalog
+from app.agent.chart import ChartRunner, with_missing_charts
 from app.agent.prompts import ANSWER_SYSTEM, FORCE_ANSWER, PLAN_SYSTEM, SCOPE_NOTE
 from app.agent.sql import SqlRunner
 from app.agent.tools import build_tools
@@ -85,7 +86,13 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
     def get_sql() -> SqlRunner:
         return SqlRunner(client, run_id, holder["catalog"])
 
-    tools = build_tools(lambda: holder["catalog"], get_account, get_sql)
+    # Every chart drawn during this run: the answer must show them all.
+    charts_made: list[dict] = []
+
+    def get_chart() -> ChartRunner:
+        return ChartRunner(client, run_id, charts_made)
+
+    tools = build_tools(lambda: holder["catalog"], get_account, get_sql, get_chart)
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)
 
@@ -128,7 +135,7 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
         text = _text(response).strip()
         if not text:
             raise ValueError("The model returned an empty answer")
-        return {"answer": text}
+        return {"answer": with_missing_charts(text, charts_made)}
 
     def run_tools(state: AgentState) -> AgentState:
         results, log = [], []
