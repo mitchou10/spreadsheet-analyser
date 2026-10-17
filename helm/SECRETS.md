@@ -5,7 +5,7 @@ arrivent dans les pods (Vault Secrets Operator, comme Muffin) et comment les ren
 réelle.
 
 Le chart est celui de Muffin (basé sur les charts de [this-is-tobi](https://github.com/this-is-tobi/helm-charts)) :
-chaque composant (`backend`, `frontend`, `agent_worker`, `analysis_worker`) et chaque job (`jobs.migration`) charge
+chaque composant (`backend`, `frontend`, `agent_worker`, `analysis_worker`, `index_worker`) et chaque job (`jobs.migration`) charge
 des `Secret` dans son environnement avec `envFrom`, et `extraObjects` déclare les `VaultStaticSecret` qui créent ces
 `Secret`. Tout est écrit dans [`values/common-values.yaml`](values/common-values.yaml), `values.yaml` ne contenant que
 les valeurs par défaut du chart.
@@ -22,15 +22,15 @@ les valeurs par défaut du chart.
 
 ## Inventaire
 
-| Variable | Rôle | Backend | Worker agent | Worker analyse | Job de migration |
-|---|---|:-:|:-:|:-:|:-:|
-| `DATABASE_URL` | Connexion PostgreSQL, **mot de passe inclus** | ✔ | | | ✔ |
-| `REDIS_URL` | Redis : sessions du backend et file Celery. Contient un mot de passe s'il est protégé | ✔ | ✔ | ✔ | |
-| `KEYCLOAK_CLIENT_SECRET` | Secret du client Keycloak du backend (échange du code OAuth2) | ✔ | | | |
-| `AWS_ACCESS_KEY_ID` | Identifiant S3 / RustFS | ✔ | ✔ | ✔ | |
-| `AWS_SECRET_ACCESS_KEY` | Clé secrète S3 / RustFS | ✔ | ✔ | ✔ | |
-| `INTERNAL_API_TOKEN` | Jeton Bearer des workers vers `/api/internal/*`. **Même valeur partout** | ✔ | ✔ | ✔ | |
-| `OPENAI_API_KEY` | Clé du fournisseur de modèles (OpenAI ou compatible) | ✔ | ✔ | | |
+| Variable | Rôle | Backend | Worker agent | Worker analyse | Worker index | Job de migration |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `DATABASE_URL` | Connexion PostgreSQL, **mot de passe inclus** | ✔ | | | | ✔ |
+| `REDIS_URL` | Redis : sessions du backend et file Celery. Contient un mot de passe s'il est protégé | ✔ | ✔ | ✔ | ✔ | |
+| `KEYCLOAK_CLIENT_SECRET` | Secret du client Keycloak du backend (échange du code OAuth2) | ✔ | | | | |
+| `AWS_ACCESS_KEY_ID` | Identifiant S3 / RustFS | ✔ | ✔ | ✔ | ✔ | |
+| `AWS_SECRET_ACCESS_KEY` | Clé secrète S3 / RustFS | ✔ | ✔ | ✔ | ✔ | |
+| `INTERNAL_API_TOKEN` | Jeton Bearer des workers vers `/api/internal/*`. **Même valeur partout** | ✔ | ✔ | ✔ | ✔ | |
+| `OPENAI_API_KEY` | Clé du fournisseur de modèles (OpenAI ou compatible) | ✔ | ✔ | | | |
 
 Tout le reste (`KEYCLOAK_URL`, `KEYCLOAK_REALM`, `AWS_S3_BUCKET`, `AWS_ENDPOINT_URL_S3`, `OPENAI_BASE_URL`,
 `LLM_DEFAULT_MODEL`, `FRONTEND_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_URL`…) n'est pas secret et va dans `env:`.
@@ -54,16 +54,16 @@ un pod ne reçoit que les `Secret` qu'il liste dans `envFrom`.
 
 | Chemin Vault (exemple) | Clés à y écrire | `Secret` créé | Lu par |
 |---|---|---|---|
-| `spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker |
+| `spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker, index_worker |
 | `spreadsheet-analyser/keycloak` | `KEYCLOAK_CLIENT_SECRET` | `spreadsheet-analyser-keycloak` | backend |
 | `spreadsheet-analyser/openai` | `OPENAI_API_KEY` | `spreadsheet-analyser-openai` | backend, agent_worker |
-| `spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker |
-| `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker |
+| `spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker |
+| `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker |
 | `spreadsheet-analyser/db` | `username`, `password` | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) | backend, jobs.migration |
 
 Le point d'accès (`mount`), les chemins et le `vaultAuthRef` dépendent de votre plateforme : ils se règlent dans vos
 valeurs, pas dans le chart. `INTERNAL_API_TOKEN` est volontairement dans **un seul** `Secret` partagé par tous les
-composants, pour que le backend et les deux workers ne puissent jamais diverger.
+composants, pour que le backend et les trois workers ne puissent jamais diverger.
 
 ### Écrire les secrets dans Vault
 
@@ -87,7 +87,7 @@ openssl rand -hex 32 | vault kv put -mount=kv spreadsheet-analyser/internal INTE
 1. `extraObjects` déclare un `VaultStaticSecret` par `Secret` (`vaultAuthRef`, `mount`, `type: kv-v2`, `path`).
 2. Vault Secrets Operator lit le chemin Vault et crée le `Secret` Kubernetes (`destination.create: true`).
 3. Les conteneurs le chargent par `envFrom` (`backend.envFrom`, `agent_worker.envFrom`, `analysis_worker.envFrom`,
-   `jobs.migration.envFrom`). Pour une variable définie dans
+   `index_worker.envFrom`, `jobs.migration.envFrom`). Pour une variable définie dans
    plusieurs `Secret`, la **dernière** source gagne : placez les `Secret` calculés (`…-db`, `…-redis`) en dernier.
 4. `refreshAfter` fait relire Vault périodiquement, et `rolloutRestartTargets` redémarre automatiquement les
    `Deployment` listés quand une valeur change.
@@ -133,7 +133,7 @@ qui les applique.
 
 | Secret | À savoir |
 |---|---|
-| `INTERNAL_API_TOKEN` | Un seul `Secret` pour tous : le backend et les deux workers redémarrent ensemble. Brève fenêtre de 401 le temps du redémarrage. |
+| `INTERNAL_API_TOKEN` | Un seul `Secret` pour tous : le backend et les trois workers redémarrent ensemble. Brève fenêtre de 401 le temps du redémarrage. |
 | `KEYCLOAK_CLIENT_SECRET` | Régénérer dans Keycloak d'abord, puis écrire dans Vault. Les sessions étant dans Redis, les connexions en cours ne sont pas coupées. |
 | `username` / `password` (base) | Changer le mot de passe dans PostgreSQL, puis dans Vault : une courte coupure est possible entre les deux. Garder les mots de passe alphanumériques. |
 | `REDIS_PASSWORD` | À changer côté Redis et dans Vault en même temps : les sessions et la file Celery sont interrompues pendant le redémarrage. |
@@ -163,8 +163,8 @@ déconnexion de votre domaine.
 ## Ce que le chart déploie, et ce qui reste à votre charge
 
 Déployé : `frontend`, `backend`, `agent_worker` (file `agent`), `analysis_worker` (file `analysis`, 1 Gio de mémoire
-maximum) et le job `migration` (`alembic upgrade head`, en hook `post-install` / `post-upgrade` pour que les `Secret`
-créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker`, `analysis-worker`).
+maximum), `index_worker` (file `index` : index de recherche des collections et des utilisateurs) et le job `migration` (`alembic upgrade head`, en hook `post-install` / `post-upgrade` pour que les `Secret`
+créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker`, `analysis-worker`, `index-worker`).
 
 À votre charge, dans votre fichier de valeurs d'environnement :
 
