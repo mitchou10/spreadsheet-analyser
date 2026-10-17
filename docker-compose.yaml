@@ -77,6 +77,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       BACKEND_URL: http://backend:8000
       INTERNAL_API_TOKEN: dev-only-internal-token
+      # The agent reads the analyses (analyse.json) of the files in scope straight from S3.
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL_S3: http://rustfs:9000
+      AWS_S3_BUCKET: spreadsheet-analyser
       # OpenAI SDK, any OpenAI-compatible endpoint. Put OPENAI_API_KEY in your local .env (runs fail without it).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
@@ -86,6 +92,34 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      rustfs:
+        condition: service_started
+
+  # Spreadsheet analysis: same image as the agent worker, its own queue, and a memory ceiling so a
+  # pathological file can only ever take down this container (Celery also recycles a child past 600 MB).
+  analysis-worker:
+    build:
+      context: worker
+      target: runtime
+    command:
+      ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "analysis", "--concurrency=2", "--max-memory-per-child=600000"]
+    mem_limit: 1g
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: dev-only-internal-token
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL_S3: http://rustfs:9000
+      AWS_S3_BUCKET: spreadsheet-analyser
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
 
   postgres:
     image: postgres:16-alpine

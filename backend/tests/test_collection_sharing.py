@@ -93,7 +93,9 @@ async def test_shared_user_can_read_files_and_analyses(session, storage, shared)
     files = FileService(session, storage)
     analyses = AnalysisService(session, storage)
     analysis = await analyses.create(ALICE, file.id)
-    await analyses.complete(analysis.id, {"ok": True})
+    await analyses.start(analysis.id)
+    await storage.put_json((await analyses.context(analysis.id)).result_key, {"ok": True})
+    await analyses.complete(analysis.id, (await analyses.context(analysis.id)).result_key)
 
     assert [f.id for f in await files.list_in_collection(BOB, collection.id)] == [file.id]
     assert (await files.download(BOB, file.id))[1] == b"x"

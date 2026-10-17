@@ -409,3 +409,86 @@ async def test_model_can_be_sent_with_every_message(client) -> None:
 
     assert used == ["gpt-test", "other-model", "gpt-test"]
     assert (await client.get("/api/conversations")).json()[0]["model"] == "gpt-test"
+
+
+async def test_upload_queues_the_analysis_and_exposes_its_result(client, dispatcher, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+
+    pending = (await client.get(f"/api/files/{file['id']}/analysis")).json()
+    assert (pending["status"], pending["result"]) == ("pending", None)
+    analysis_id = pending["id"]
+    assert dispatcher.analyses == [uuid.UUID(analysis_id)]
+
+    # What the analysis worker does: read the context, start, write analyse.json, complete.
+    context = (await client.get(f"/api/internal/analyses/{analysis_id}/context", headers=worker)).json()
+    assert context["source_key"].endswith("/versions/1/a.xlsx") and context["result_key"].endswith("/analyse.json")
+    assert context["source_key"] in storage.objects
+    started = await client.post(f"/api/internal/analyses/{analysis_id}/start", headers=worker)
+    assert started.json()["status"] == "processing"
+    storage.objects[context["result_key"]] = {"summary": {"rows": 3}}
+    wrong = await client.post(
+        f"/api/internal/analyses/{analysis_id}/complete", json={"s3_key": "elsewhere.json"}, headers=worker
+    )
+    assert wrong.status_code == 409
+    done = await client.post(
+        f"/api/internal/analyses/{analysis_id}/complete", json={"s3_key": context["result_key"]}, headers=worker
+    )
+    assert done.json()["status"] == "ready"
+
+    ready = (await client.get(f"/api/files/{file['id']}/analysis")).json()
+    assert (ready["status"], ready["result"]) == ("ready", {"summary": {"rows": 3}})
+    listed = (await client.get(f"/api/collections/{collection['id']}/files")).json()
+    assert listed[0]["status"] == "ready"
+
+
+async def test_failed_analysis_is_reported_with_its_error(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    analysis_id = (await client.get(f"/api/files/{file['id']}/analysis")).json()["id"]
+
+    await client.post(f"/api/internal/analyses/{analysis_id}/start", headers=worker)
+    await client.post(f"/api/internal/analyses/{analysis_id}/fail", json={"error": "Corrupt archive"}, headers=worker)
+
+    failed = (await client.get(f"/api/files/{file['id']}/analysis")).json()
+    assert (failed["status"], failed["error"], failed["result"]) == ("error", "Corrupt archive", None)
+
+
+async def test_analysis_is_readable_by_a_shared_user_only(client) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    await client.post(f"/api/collections/{collection['id']}/access", json={"email": BOB.email})
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.get(f"/api/files/{file['id']}/analysis")).status_code == 200
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id="carol", email="carol@example.com")
+    assert (await client.get(f"/api/files/{file['id']}/analysis")).status_code == 404
+
+
+async def test_internal_analysis_api_requires_the_token(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    missing = "00000000-0000-0000-0000-000000000000"
+
+    assert (await client.get(f"/api/internal/analyses/{missing}/context")).status_code == 401
+    assert (await client.post(f"/api/internal/analyses/{missing}/start")).status_code == 401
+    unknown = await client.post(f"/api/internal/analyses/{missing}/start", headers={"Authorization": "Bearer secret"})
+    assert unknown.status_code == 404
+
+
+async def test_internal_run_files_lists_the_agents_scope(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "q"})).json()["run"]
+    url = f"/api/internal/runs/{run['id']}/files"
+
+    assert (await client.get(url)).status_code == 401
+    [item] = (await client.get(url, headers={"Authorization": "Bearer secret"})).json()
+
+    assert (item["file_id"], item["file_name"], item["collection_name"]) == (file["id"], "a.xlsx", "Sales")
+    assert (item["analysis_status"], item["result_key"]) == ("pending", None)

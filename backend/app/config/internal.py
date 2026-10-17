@@ -9,5 +9,8 @@ class InternalSettings(BaseSettings):
     RUN_TASK_NAME: str = "worker.run_agent"
     # Queue consumed by the agent worker (other workers, e.g. spreadsheet analysis, use their own queue).
     RUN_QUEUE: str = "agent"
+    # Spreadsheet analysis runs in its own worker (own queue, own memory limit).
+    ANALYSIS_TASK_NAME: str = "analysis.run"
+    ANALYSIS_QUEUE: str = "analysis"
 
     model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")

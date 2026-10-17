@@ -6,7 +6,16 @@ from fastapi import APIRouter, HTTPException, Response, UploadFile, status
 from app.config import S3Settings
 from app.dependencies import ActorDep, AnalysisServiceDep, CollectionServiceDep, FileServiceDep
 from app.models import AccessCollection, Collection, File
-from app.schemas import AccessCreate, AccessOut, CollectionCreate, CollectionOut, CollectionUpdate, FileOut
+from app.schemas import (
+    AccessCreate,
+    AccessOut,
+    AnalysisOut,
+    AnalysisResultOut,
+    CollectionCreate,
+    CollectionOut,
+    CollectionUpdate,
+    FileOut,
+)
 
 collections_router = APIRouter(prefix="/collections", tags=["Collections"])
 files_router = APIRouter(prefix="/files", tags=["Files"])
@@ -187,3 +196,11 @@ async def stop_analysis(
 ) -> FileOut:
     await analyses.stop_latest(actor, file_id)
     return (await _files_out([await files.get(actor, file_id)], analyses))[0]
+
+
+@files_router.get("/{file_id}/analysis", summary="Latest analysis of the file's current version, with its result")
+async def get_analysis(file_id: uuid.UUID, actor: ActorDep, analyses: AnalysisServiceDep) -> AnalysisResultOut:
+    analysis = await analyses.get_latest_for_file(actor, file_id)
+    return AnalysisResultOut(
+        **AnalysisOut.model_validate(analysis).model_dump(), result=await analyses.read_result(analysis)
+    )

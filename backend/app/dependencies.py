@@ -46,8 +46,17 @@ def get_file_service(session: SessionDep, storage: StorageDep) -> FileService:
     return FileService(session, storage)
 
 
-def get_analysis_service(session: SessionDep, storage: StorageDep) -> AnalysisService:
-    return AnalysisService(session, storage)
+_dispatcher = CeleryRunDispatcher()
+
+
+def get_dispatcher() -> RunDispatcher:
+    return _dispatcher
+
+
+def get_analysis_service(
+    session: SessionDep, storage: StorageDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> AnalysisService:
+    return AnalysisService(session, storage, dispatcher)
 
 
 def get_conversation_service(session: SessionDep) -> ConversationService:
@@ -58,13 +67,6 @@ CollectionServiceDep = Annotated[CollectionService, Depends(get_collection_servi
 FileServiceDep = Annotated[FileService, Depends(get_file_service)]
 AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
-
-
-_dispatcher = CeleryRunDispatcher()
-
-
-def get_dispatcher() -> RunDispatcher:
-    return _dispatcher
 
 
 def get_run_service(session: SessionDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]) -> RunService:

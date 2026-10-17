@@ -114,28 +114,60 @@ def main() -> int:
         cid = collection["id"]
         check("create collection", collection["is_owner"] and collection["file_count"] == 0, collection)
 
+        csv_bytes = b"produit;prix;date\nStylo;1,50;01/02/2024\nCahier;3,20;15/03/2024\nStylo;;20/04/2024\n"
         uploaded = client.post(
             f"{api}/collections/{cid}/files",
             files=[
-                ("files", ("ventes.csv", b"a,b\n1,2\n", "text/csv")),
-                ("files", ("b.xlsx", b"PK-fake", "application/octet-stream")),
+                ("files", ("ventes.csv", csv_bytes, "text/csv")),
+                ("files", ("corrompu.xlsx", b"PK-not-a-real-workbook", "application/octet-stream")),
             ],
         )
         check("upload 2 files (real RustFS)", uploaded.status_code == 201 and len(uploaded.json()) == 2, uploaded.text)
-        files = client.get(f"{api}/collections/{cid}/files").json()
-        check("files listed as pending", {f["status"] for f in files} == {"pending"}, files)
-        file_id = next(f["id"] for f in files if f["name"] == "ventes.csv")
+        file_id = next(f["id"] for f in uploaded.json() if f["name"] == "ventes.csv")
+        broken_id = next(f["id"] for f in uploaded.json() if f["name"] == "corrompu.xlsx")
         download = client.get(f"{api}/files/{file_id}/download")
-        check("download returns the uploaded bytes", download.content == b"a,b\n1,2\n", download.content)
+        check("download returns the uploaded bytes", download.content == csv_bytes, download.content)
         check("collection file_count updated", client.get(f"{api}/collections/{cid}").json()["file_count"] == 2)
         check(
             "unsupported extension rejected",
             client.post(f"{api}/collections/{cid}/files", files=[("files", ("x.exe", b"x"))]).status_code == 415,
         )
 
-        # --- Analysis control ---
-        check("stop analysis", client.post(f"{api}/files/{file_id}/analysis/stop").json()["status"] == "stopped")
-        check("retry analysis", client.post(f"{api}/files/{file_id}/analysis").json()["status"] == "pending")
+        # --- Spreadsheet analysis (analysis worker, own queue) ---
+        def wait_for_analysis(fid: str) -> dict:
+            analysis = {}
+            for _ in range(40):
+                analysis = client.get(f"{api}/files/{fid}/analysis").json()
+                if analysis["status"] not in ("pending", "processing"):
+                    break
+                time.sleep(0.5)
+            return analysis
+
+        analysis = wait_for_analysis(file_id)
+        check("analysis worker finishes the CSV analysis", analysis["status"] == "ready", analysis)
+        sheet = (analysis.get("result") or {"sheets": [{}]})["sheets"][0]
+        columns = {c["name"]: c for c in sheet.get("columns", [])}
+        check(
+            "analysis result describes rows, columns and types",
+            sheet.get("rows") == 3
+            and columns.get("prix", {}).get("type") == "number"
+            and columns.get("date", {}).get("type") == "date",
+            sheet,
+        )
+        check(
+            "file list shows the analysis status",
+            {f["name"]: f["status"] for f in client.get(f"{api}/collections/{cid}/files").json()}["ventes.csv"]
+            == "ready",
+        )
+        broken = wait_for_analysis(broken_id)
+        check(
+            "a corrupt file ends in a readable error (not stuck)",
+            broken["status"] == "error" and "zip" in (broken["error"] or "").lower(),
+            broken,
+        )
+        retried = client.post(f"{api}/files/{file_id}/analysis")
+        check("retry analysis re-queues it", retried.status_code == 202, retried.text)
+        check("retried analysis becomes ready again", wait_for_analysis(file_id)["status"] == "ready")
 
         # --- Sharing ---
         share = client.post(f"{api}/collections/{cid}/access", json={"email": "Someone@Example.com"})
