@@ -9,6 +9,8 @@ const TOOL_LABELS: Record<string, string> = {
   search_values: 'Recherche de valeurs',
   describe_sheet: 'Détail d’une feuille',
   describe_column: 'Détail d’une colonne',
+  account_overview: 'Vue d’ensemble du compte',
+  account_files: 'Fichiers du compte',
 }
 
 const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool
