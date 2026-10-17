@@ -950,6 +950,225 @@ Kubernetes: `>=1.25.0-0`
 | gateway.listeners | list | `[]` | Gateway listeners configuration. |
 | gateway.name | string | `""` | Name of the Gateway resource. If not set, uses the release fullname. |
 
+### IndexWorker
+
+#### General
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.affinity | object | `{}` | Affinity used for app pod. |
+| index_worker.args | list | `[]` | Index_worker container command args. |
+| index_worker.automountServiceAccountToken | bool | `false` | Mount the ServiceAccount token into the app pods. Defaults to false so a compromised container holds no API credentials; the API server does not need the token unless the app actually talks to the Kubernetes API. Applied at pod level so it holds even when `serviceAccount.name` points at an SA that automounts. |
+| index_worker.command | list | `[]` | Index_worker container command. |
+| index_worker.containerPort | string | `nil` | Index_worker container port number. Set to `null`/`0` (and disable `service`/probes) for components that don't listen on any port (e.g. a queue consumer). |
+| index_worker.containerPortName | string | `"http"` | Index_worker container port name. |
+| index_worker.deploymentType | string | `"Deployment"` | Workload kind to deploy the app as. One of "Deployment", "StatefulSet" or "DaemonSet" (validated at render time - an unknown value fails instead of producing a release with no workload). Use the top-level `jobs` / `cronjobs` maps for one-off or scheduled workloads. Some values only apply to certain kinds: `replicaCount`/`autoscaling` and `strategy` are Deployment-only (`autoscaling` also works on a StatefulSet), `volumeClaims`/`extraVolumeClaims` are StatefulSet-only, and `updateStrategy` covers StatefulSet and DaemonSet. |
+| index_worker.dnsConfig | object | `{}` | Pod DNS configuration, merged with `dnsPolicy` by the kubelet. |
+| index_worker.dnsPolicy | string | `""` (`ClusterFirstWithHostNet` when `hostNetwork` is true) | Pod DNS policy. Left empty, it defaults to `ClusterFirstWithHostNet` when `hostNetwork` is true (otherwise a hostNetwork pod silently stops resolving cluster DNS) and to the Kubernetes default `ClusterFirst` when it isn't. |
+| index_worker.enableServiceLinks | bool | `false` | Inject the legacy `{SVC}_SERVICE_HOST`/`_PORT` environment variables for every Service in the namespace. Defaults to false: the variables are rarely used, leak the namespace's topology into every container, and can collide with the app's own configuration. Set to true only for an app that genuinely reads them. |
+| index_worker.env | object | `{}` | Map or array of environment variables to inject into the app container (`valueFrom` supported). |
+| index_worker.envCm | object | `{}` | Map of environment variables to inject into a configmap loaded by the app container (`valueFrom` not supported). |
+| index_worker.envFrom | list | `[]` | Index_worker container env variables loaded from configmap or secret reference. List or map (merged with `global.envFrom` above, global entries first); see `global.envFrom` for both forms. |
+| index_worker.envSecret | object | `{}` | Map of environment variables to inject into a secret loaded by the app container (`valueFrom` not supported). Values placed here are stored in plain text in the values file AND in the Helm release secret, so use it for non-sensitive-but-secret-shaped config only. For real credentials prefer referencing a Secret you manage elsewhere via `envFrom`, or have an operator materialise it (see the `VaultStaticSecret` example under `extraObjects`). |
+| index_worker.extraContainers | list | `[]` | Extra containers to add to the app pod as sidecars. |
+| index_worker.extraPorts | list | `[]` | Index_worker extra container ports. |
+| index_worker.extraVolumeClaims | list | `[]` | Additional volumeClaims to add, concatenated with `volumeClaims` above at render time. |
+| index_worker.extraVolumeMounts | list | `[]` | Additional volumeMounts to add, concatenated with `volumeMounts` above at render time. |
+| index_worker.extraVolumes | list | `[]` | Additional volumes to add, concatenated with `volumes` above at render time (e.g. to mount a cert or config from a values override without repeating the chart's own volumes). |
+| index_worker.hostAliases | list | `[]` | Host aliases that will be injected at pod-level into /etc/hosts. |
+| index_worker.hostNetwork | bool | `false` | Share the host network namespace. Container ports then bind directly on the node, so they must not collide with anything else running there. |
+| index_worker.hostPID | bool | `false` | Share the host PID namespace (lets the container see and signal host processes). |
+| index_worker.imagePullSecrets | list | `[]` | Image credentials configuration. |
+| index_worker.initContainers | list | `[]` | Init containers to add to the app pod. |
+| index_worker.nodeSelector | object | `{}` | Default node selector for app. |
+| index_worker.podAnnotations | object | `{}` | Annotations for the app deployed pods. |
+| index_worker.podLabels | object | `{}` | Labels for the app deployed pods. |
+| index_worker.podSecurityContext | object | `{"fsGroup":1000,"fsGroupChangePolicy":"OnRootMismatch","runAsGroup":1000,"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context. Defaults to a hardened baseline that satisfies the `restricted` Pod Security Standard. Rendered via `toYaml`, so any `PodSecurityContext` field is accepted. Adjust the UID/GID to whatever your image actually ships with - `runAsNonRoot` makes the kubelet refuse to start a container that would run as root, which is the intended failure mode rather than something to switch off. Set to `null` to omit the block entirely. |
+| index_worker.priorityClassName | string | `""` | PriorityClass to schedule the pods with (e.g. `system-node-critical` for a node agent that must not be evicted under pressure). |
+| index_worker.replicaCount | int | `1` | The number of application controller pods to run. Ignored when `deploymentType` is "DaemonSet" (one pod per node) or when `autoscaling.enabled` is true. |
+| index_worker.revisionHistoryLimit | int | `10` | Revision history limit for the app. |
+| index_worker.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"privileged":false,"readOnlyRootFilesystem":true,"runAsGroup":1000,"runAsNonRoot":true,"runAsUser":1000}` | Container-level security context. Defaults to a hardened baseline that satisfies the `restricted` Pod Security Standard: no privilege escalation, no capabilities, immutable root filesystem. Rendered via `toYaml`, so any `SecurityContext` field is accepted. Note `readOnlyRootFilesystem` requires the app to write only to mounted volumes - the default `volumes`/`volumeMounts` below provide an `emptyDir` on /tmp for that reason. Set to `null` to omit the block entirely. |
+| index_worker.terminationGracePeriodSeconds | int | `null` (Kubernetes default of 30) | Grace period, in seconds, given to the pod to shut down cleanly before it is killed. |
+| index_worker.tolerations | list | `[]` | Default tolerations for app. |
+| index_worker.topologySpreadConstraints | list | `[]` | Topology spread constraints used to spread the pods across failure domains. |
+| index_worker.updateStrategy | object | `{}` | Update strategy applied when `deploymentType` is "StatefulSet" or "DaemonSet" (ignored for a Deployment, which uses `strategy` above). Rendered verbatim via `toYaml`, so it takes the native `StatefulSetUpdateStrategy`/`DaemonSetUpdateStrategy` shape of the selected kind; left empty, Kubernetes applies its own default (`RollingUpdate` for both). |
+| index_worker.volumeClaims | list | `[]` | List of volumeClaims to add, rendered as the StatefulSet's `volumeClaimTemplates`. Requires `deploymentType: "StatefulSet"` - setting it on a Deployment or DaemonSet fails at render time rather than being silently dropped (use `volumes`/`extraVolumes` there instead). |
+| index_worker.volumeMounts | list | `[{"mountPath":"/tmp","name":"tmp"}]` | List of mounts to add (normally used with `volumes` or `volumeClaims`). Prefer this for mounts the chart itself always needs; use `extraVolumeMounts` below for anything you add on top, so overriding one doesn't require repeating the other. Defaults to the `/tmp` mount backing the hardened `readOnlyRootFilesystem` default (see `volumes` above). |
+| index_worker.volumes | list | `[{"emptyDir":{},"name":"tmp"}]` | List of volumes to add. Prefer this for volumes the chart itself always needs (e.g. security-hardening `emptyDir`s); use `extraVolumes` below for anything you add on top, so overriding one doesn't require repeating the other. Defaults to a `/tmp` `emptyDir`, which is what makes the default `securityContext.readOnlyRootFilesystem: true` usable - drop it only if you also relax that. Helm replaces lists wholesale rather than merging them, so overriding this key means restating the entries you want to keep. |
+
+#### Autoscaling
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.autoscaling.enabled | bool | `false` | Enable Horizontal Pod Autoscaler for the app. |
+| index_worker.autoscaling.maxReplicas | int | `3` | Maximum number of replicas for the app. |
+| index_worker.autoscaling.minReplicas | int | `1` | Minimum number of replicas for the app. |
+| index_worker.autoscaling.targetCPUUtilizationPercentage | int | `80` | Average CPU utilization percentage for the app. |
+| index_worker.autoscaling.targetMemoryUtilizationPercentage | int | `80` | Average memory utilization percentage for the app. |
+
+#### GrpcRoute
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.grpcRoute.annotations | object | `{}` | Additional GRPCRoute annotations. |
+| index_worker.grpcRoute.enabled | bool | `false` | Enable a GRPCRoute resource for this service. |
+| index_worker.grpcRoute.hostnames | list | `[]` | Hostnames for the GRPCRoute to match. |
+| index_worker.grpcRoute.labels | object | `{}` | Additional GRPCRoute labels. |
+| index_worker.grpcRoute.parentRefs | list | `[]` | Parent references (Gateways) to attach the GRPCRoute to. |
+| index_worker.grpcRoute.rules | list | `[]` | Routing rules for the GRPCRoute. |
+
+#### HttpRoute
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.httpRoute.annotations | object | `{}` | Additional HTTPRoute annotations. |
+| index_worker.httpRoute.enabled | bool | `false` | Enable an HTTPRoute resource for this service. |
+| index_worker.httpRoute.hostnames | list | `[]` | Hostnames for the HTTPRoute to match. |
+| index_worker.httpRoute.labels | object | `{}` | Additional HTTPRoute labels. |
+| index_worker.httpRoute.parentRefs | list | `[]` | Parent references (Gateways) to attach the HTTPRoute to. |
+| index_worker.httpRoute.rules | list | `[]` | Routing rules for the HTTPRoute. |
+
+#### Image
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.image.digest | string | `""` | Image digest (`sha256:...`). When set it takes precedence over `tag`, pinning the exact image content so the same release can never resolve to a different build - preferred over a mutable tag for anything you deploy to production. |
+| index_worker.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy for the app. |
+| index_worker.image.registry | string | `"ghcr.io"` | Registry to use for the app. |
+| index_worker.image.repository | string | `"mitchou10/spreadsheet-analyser/index-worker"` | Repository to use for the app. |
+| index_worker.image.tag | string | `""` | Tag to use for the app. Overrides the image tag whose default is the chart appVersion. |
+
+#### Ingress
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.ingress.annotations | object | `{}` | Additional ingress annotations. |
+| index_worker.ingress.className | string | `""` | Defines which ingress controller will implement the resource. |
+| index_worker.ingress.enabled | bool | `false` | Whether or not ingress should be enabled. |
+| index_worker.ingress.hosts[0].name | string | `"domain.local"` | Name of the host record. |
+| index_worker.ingress.hosts[0].paths | list | `[{"backend":{"portNumber":null,"serviceName":""},"path":"/","pathType":"Prefix"}]` | Paths of the host record to manage routing (avoids repeating the same host for multiple paths/backends). |
+| index_worker.ingress.hosts[0].paths[0].backend.portNumber | string | `nil` | Port used by the backend service linked to the path (leave null to use the app service port). |
+| index_worker.ingress.hosts[0].paths[0].backend.serviceName | string | `""` | Name of the backend service linked to the path (leave empty to use the app service). |
+| index_worker.ingress.hosts[0].paths[0].path | string | `"/"` | Path of the host record to manage routing. |
+| index_worker.ingress.hosts[0].paths[0].pathType | string | `"Prefix"` | Path type of the host record. |
+| index_worker.ingress.labels | object | `{}` | Additional ingress labels. |
+| index_worker.ingress.tls | list | `[]` | Enable TLS configuration. |
+
+#### Metrics
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.metrics.enabled | bool | `false` | Deploy metrics service. |
+| index_worker.metrics.service.annotations | object | `{}` | Metrics service annotations. |
+| index_worker.metrics.service.labels | object | `{}` | Metrics service labels. |
+| index_worker.metrics.service.port | int | `9000` | Metrics service port. |
+| index_worker.metrics.service.portName | string | `"metrics"` | Metrics service port name. |
+| index_worker.metrics.service.targetPort | int | `9000` | Metrics service target port. |
+| index_worker.metrics.service.type | string | `"ClusterIP"` | Type of metrics service to create. |
+| index_worker.metrics.serviceMonitor.annotations | object | `{}` | Prometheus ServiceMonitor annotations. |
+| index_worker.metrics.serviceMonitor.enabled | bool | `false` | Enable a prometheus ServiceMonitor. |
+| index_worker.metrics.serviceMonitor.endpoints[0].basicAuth.password | string | `""` | The secret in the service monitor namespace that contains the password for authentication. |
+| index_worker.metrics.serviceMonitor.endpoints[0].basicAuth.username | string | `""` | The secret in the service monitor namespace that contains the username for authentication. |
+| index_worker.metrics.serviceMonitor.endpoints[0].bearerTokenSecret.key | string | `""` | Secret key to mount to read bearer token for scraping targets. The secret needs to be in the same namespace as the service monitor and accessible by the Prometheus Operator. |
+| index_worker.metrics.serviceMonitor.endpoints[0].bearerTokenSecret.name | string | `""` | Secret name to mount to read bearer token for scraping targets. The secret needs to be in the same namespace as the service monitor and accessible by the Prometheus Operator. |
+| index_worker.metrics.serviceMonitor.endpoints[0].honorLabels | bool | `false` | When true, honorLabels preserves the metric’s labels when they collide with the target’s labels. |
+| index_worker.metrics.serviceMonitor.endpoints[0].interval | string | `"30s"` | Prometheus ServiceMonitor interval. |
+| index_worker.metrics.serviceMonitor.endpoints[0].metricRelabelings | list | `[]` | Prometheus MetricRelabelConfigs to apply to samples before ingestion. |
+| index_worker.metrics.serviceMonitor.endpoints[0].path | string | `"/metrics"` | Path used by the Prometheus ServiceMonitor to scrape metrics. |
+| index_worker.metrics.serviceMonitor.endpoints[0].relabelings | list | `[]` | Prometheus RelabelConfigs to apply to samples before scraping. |
+| index_worker.metrics.serviceMonitor.endpoints[0].scheme | string | `""` | Prometheus ServiceMonitor scheme. |
+| index_worker.metrics.serviceMonitor.endpoints[0].scrapeTimeout | string | `"10s"` | Prometheus ServiceMonitor scrapeTimeout. If empty, Prometheus uses the global scrape timeout unless it is less than the target's scrape interval value in which the latter is used. |
+| index_worker.metrics.serviceMonitor.endpoints[0].selector | object | `{}` | Prometheus ServiceMonitor selector. |
+| index_worker.metrics.serviceMonitor.endpoints[0].tlsConfig | object | `{}` | Prometheus ServiceMonitor tlsConfig. |
+| index_worker.metrics.serviceMonitor.labels | object | `{}` | Prometheus ServiceMonitor labels. |
+
+#### NetworkPolicy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.networkPolicy.annotations | object | `{}` | Annotations to be added to the app NetworkPolicy. |
+| index_worker.networkPolicy.create | bool | `false` | Create NetworkPolicy object for the app. The policy always selects this component's pods only (via its selector labels), never the whole namespace. |
+| index_worker.networkPolicy.egress | list | `[]` | Egress rules for the NetworkPolicy object. |
+| index_worker.networkPolicy.ingress | list | `[]` | Ingress rules for the NetworkPolicy object. |
+| index_worker.networkPolicy.labels | object | `{}` | Labels to be added to the app NetworkPolicy. |
+| index_worker.networkPolicy.policyTypes | list | `["Ingress"]` | Policy types used in the NetworkPolicy object. |
+
+#### Pdb
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.pdb.annotations | object | `{}` | Annotations to be added to app pdb. |
+| index_worker.pdb.enabled | bool | `false` | Deploy a PodDisruptionBudget for the app |
+| index_worker.pdb.labels | object | `{}` | Labels to be added to app pdb. |
+| index_worker.pdb.maxUnavailable | string | `""` | Number of pods that are unavailable after eviction as number or percentage (eg.: 50%). Has higher precedence over `index_worker.pdb.minAvailable`. |
+| index_worker.pdb.minAvailable | string | `""` | Number of pods that are available after eviction as number or percentage (eg.: 50%). One of `minAvailable` / `maxUnavailable` must be set when `pdb.enabled` is true - a budget of 0 is the same as having no budget at all, so leaving both empty fails at render time. |
+
+#### Probes
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.probes.livenessProbe.exec | object | `{"command":["sh","-c","celery -A app.celery_app inspect ping -d celery@$HOSTNAME"]}` | Index_worker container healthcheck (livenessProbe is defined using `toYaml` so it is possible to override it completely). Uses `celery inspect ping` since Celery workers don't expose an HTTP endpoint. It runs in a shell so that $HOSTNAME is the pod's real hostname (Kubernetes only expands `$(VAR)` for variables declared in the pod spec). |
+| index_worker.probes.livenessProbe.failureThreshold | int | `3` | Minimum consecutive failures for the probe to be considered failed after having succeeded. |
+| index_worker.probes.livenessProbe.initialDelaySeconds | int | `30` | Number of seconds after the container has started before probe is initiated. |
+| index_worker.probes.livenessProbe.periodSeconds | int | `30` | How often (in seconds) to perform the probe. |
+| index_worker.probes.livenessProbe.successThreshold | int | `1` | Minimum consecutive successes for the probe to be considered successful after having failed. |
+| index_worker.probes.livenessProbe.timeoutSeconds | int | `10` | Number of seconds after which the probe times out. |
+| index_worker.probes.readinessProbe.exec | object | `{"command":["sh","-c","celery -A app.celery_app inspect ping -d celery@$HOSTNAME"]}` | Index_worker container healthcheck (readinessProbe is defined using `toYaml` so it is possible to override it completely). Uses `celery inspect ping` since Celery workers don't expose an HTTP endpoint. It runs in a shell so that $HOSTNAME is the pod's real hostname (Kubernetes only expands `$(VAR)` for variables declared in the pod spec). |
+| index_worker.probes.readinessProbe.failureThreshold | int | `2` | Minimum consecutive failures for the probe to be considered failed after having succeeded. |
+| index_worker.probes.readinessProbe.initialDelaySeconds | int | `10` | Number of seconds after the container has started before probe is initiated. |
+| index_worker.probes.readinessProbe.periodSeconds | int | `10` | How often (in seconds) to perform the probe. |
+| index_worker.probes.readinessProbe.successThreshold | int | `2` | Minimum consecutive successes for the probe to be considered successful after having failed. |
+| index_worker.probes.readinessProbe.timeoutSeconds | int | `10` | Number of seconds after which the probe times out. |
+| index_worker.probes.startupProbe.exec | object | `{"command":["sh","-c","celery -A app.celery_app inspect ping -d celery@$HOSTNAME"]}` | Index_worker container healthcheck (startupProbe is defined using `toYaml` so it is possible to override it completely). Uses `celery inspect ping` since Celery workers don't expose an HTTP endpoint. It runs in a shell so that $HOSTNAME is the pod's real hostname (Kubernetes only expands `$(VAR)` for variables declared in the pod spec). |
+| index_worker.probes.startupProbe.failureThreshold | int | `10` | Minimum consecutive failures for the probe to be considered failed after having succeeded. |
+| index_worker.probes.startupProbe.initialDelaySeconds | int | `0` | Number of seconds after the container has started before probe is initiated. |
+| index_worker.probes.startupProbe.periodSeconds | int | `10` | How often (in seconds) to perform the probe. |
+| index_worker.probes.startupProbe.successThreshold | int | `1` | Minimum consecutive successes for the probe to be considered successful after having failed. |
+| index_worker.probes.startupProbe.timeoutSeconds | int | `10` | Number of seconds after which the probe times out. |
+
+#### Resources
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.resources.limits.cpu | string | `"500m"` | CPU limit for the app. |
+| index_worker.resources.limits.memory | string | `"2Gi"` | Memory limit for the app. |
+| index_worker.resources.requests.cpu | string | `"100m"` | CPU request for the app. |
+| index_worker.resources.requests.memory | string | `"256Mi"` | Memory request for the app. |
+
+#### Service
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.service.enabled | bool | `false` | Whether or not to create a Service for the app. Set to `false` for components that don't accept traffic (e.g. a queue consumer with no `containerPort`). |
+| index_worker.service.extraPorts | list | `[]` | Extra service ports. |
+| index_worker.service.nodePort | int | `null` (allocated by Kubernetes) | Port used when type is `NodePort` to expose the service on the given node port. Left empty, Kubernetes allocates one from the configured node-port range, which avoids two releases of this chart colliding on the same hardcoded port. |
+| index_worker.service.port | int | `80` | Port used by the service. |
+| index_worker.service.portName | string | `"http"` | Port name used by the service. |
+| index_worker.service.protocol | string | `"TCP"` | Protocol used by the service. |
+| index_worker.service.type | string | `"ClusterIP"` | Type of service to create for the app. |
+
+#### ServiceAccount
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.serviceAccount.annotations | object | `{}` | Annotations applied to created service account. |
+| index_worker.serviceAccount.automountServiceAccountToken | bool | `false` | Should the service account access token be automount in the pod. |
+| index_worker.serviceAccount.clusterRole.create | bool | `false` | Should the clusterRole be created. |
+| index_worker.serviceAccount.clusterRole.rules | list | `[]` | ClusterRole rules associated with the service account. |
+| index_worker.serviceAccount.create | bool | `false` | Create a service account. |
+| index_worker.serviceAccount.enabled | bool | `false` | Enable the service account. |
+| index_worker.serviceAccount.name | string | `""` | Service account name. |
+| index_worker.serviceAccount.role.create | bool | `false` | Should the role be created. |
+| index_worker.serviceAccount.role.rules | list | `[]` | Role rules associated with the service account. |
+
+#### Strategy
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| index_worker.strategy.rollingUpdate.maxSurge | int | `1` | The maximum number of pods that can be scheduled above the desired number of pods. |
+| index_worker.strategy.rollingUpdate.maxUnavailable | int | `1` | The maximum number of pods that can be unavailable during the update process. |
+| index_worker.strategy.type | string | `"RollingUpdate"` | Strategy type used to replace old Pods by new ones, can be `Recreate` or `RollingUpdate`. Only applied when `deploymentType` is "Deployment". |
+
 ## Sources
 
 **Source code:**

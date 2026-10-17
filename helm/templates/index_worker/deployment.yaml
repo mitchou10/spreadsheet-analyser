@@ -1,0 +1,25 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.index_worker.deploymentType "Deployment" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "index_worker")) | nindent 4 }}
+spec:
+  {{- if not .Values.index_worker.autoscaling.enabled }}
+  replicas: {{ .Values.index_worker.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.index_worker.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "index_worker") | nindent 6 }}
+  strategy:
+    type: {{ .Values.index_worker.strategy.type }}
+    {{- if eq .Values.index_worker.strategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxUnavailable: {{ .Values.index_worker.strategy.rollingUpdate.maxUnavailable }}
+      maxSurge: {{ .Values.index_worker.strategy.rollingUpdate.maxSurge }}
+    {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "index_worker" "component" .Values.index_worker) | nindent 4 }}
+{{- end }}
+{{- end }}

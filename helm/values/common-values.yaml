@@ -95,6 +95,28 @@ analysis_worker:
       emptyDir:
         sizeLimit: "2Gi"
 
+# Keeps the BM25 search indexes (of each collection and of each person) up to date. Consumes the `index` queue.
+# It reads analyses and indexes in S3 and asks the backend who can read what; it never needs the LLM key.
+index_worker:
+  envFrom:
+    - secretRef:
+        name: "spreadsheet-analyser-s3"
+    - secretRef:
+        name: "spreadsheet-analyser-internal"
+    - secretRef:
+        name: "spreadsheet-analyser-redis"
+  env:
+    BACKEND_URL: "http://spreadsheet-analyser-backend"
+    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_S3_BUCKET: "spreadsheet-analyser"
+    AWS_REGION: "us-east-1"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      memory: "1Gi"
+
 jobs:
   # Applies the database migrations. A post-install/post-upgrade hook, so the Secrets created by the Vault
   # Secrets Operator already exist when it runs (a pre-install hook would run before them).
@@ -153,6 +175,8 @@ extraObjects:
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "agent_worker") }}'
         - kind: Deployment
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}'
+        - kind: Deployment
+          name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}'
       destination:
         name: spreadsheet-analyser-s3
         create: true
@@ -217,6 +241,8 @@ extraObjects:
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "agent_worker") }}'
         - kind: Deployment
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}'
+        - kind: Deployment
+          name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}'
       destination:
         name: spreadsheet-analyser-internal
         create: true
@@ -242,6 +268,8 @@ extraObjects:
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "agent_worker") }}'
         - kind: Deployment
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}'
+        - kind: Deployment
+          name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}'
       destination:
         name: spreadsheet-analyser-redis
         create: true
