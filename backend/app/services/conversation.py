@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import Sequence
 
@@ -17,13 +18,18 @@ from app.repositories import CollectionRepository, ConversationRepository, FileR
 from app.services.access import CollectionAccessPolicy
 from app.services.actor import Actor
 from app.services.errors import NotFoundError
+from app.services.storage import StorageService, conversation_prefix
+
+logger = logging.getLogger(__name__)
 
 TITLE_MAX_LENGTH = 60
 
 
 class ConversationService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, storage: StorageService | None = None) -> None:
         self.session = session
+        # Only needed to delete what a conversation owns in S3 (its charts) when it is deleted.
+        self.storage = storage
         self.conversations = ConversationRepository(session)
         self.messages = MessageRepository(session)
         self.collections = CollectionRepository(session)
@@ -61,8 +67,14 @@ class ConversationService:
         return conversation
 
     async def delete(self, actor: Actor, conversation_id: uuid.UUID) -> None:
-        await self.conversations.delete(await self.get(actor, conversation_id))
+        conversation = await self.get(actor, conversation_id)
+        await self.conversations.delete(conversation)
         await self.session.commit()
+        if self.storage is not None:  # the charts of its answers
+            try:
+                await self.storage.delete_prefix(conversation_prefix(conversation_id))
+            except Exception:
+                logger.exception("Could not delete the objects of conversation %s", conversation_id)
 
     async def set_status(self, actor: Actor, conversation_id: uuid.UUID, status: ConversationStatus) -> Conversation:
         conversation = await self.get(actor, conversation_id)
@@ -129,11 +141,13 @@ class ConversationService:
         collections: list[Collection] | None = None,
         files: list[File] | None = None,
         trace: dict | None = None,
+        message_id: uuid.UUID | None = None,
     ) -> Message:
         """Adds the message to the open transaction without committing, so callers can make it atomic
         with other writes (e.g. the run it triggers). No access check: callers already did theirs."""
         message = await self.messages.add(
             Message(
+                **({"id": message_id} if message_id else {}),
                 conversation_id=conversation.id,
                 role=role,
                 content=content,

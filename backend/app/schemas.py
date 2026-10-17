@@ -1,9 +1,10 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models import AnalysisStatus, ConversationStatus, MessageRole, RunStatus, SqlQueryStatus
+from app.models import AnalysisStatus, ChartStatus, ConversationStatus, MessageRole, RunStatus, SqlQueryStatus
 
 
 class CollectionCreate(BaseModel):
@@ -330,6 +331,78 @@ class SqlQueryOut(BaseModel):
     result: SqlResult | None
     error: str | None
     available_tables: list[SqlTableOut] | None
+
+
+class ChartSpec(BaseModel):
+    """What to draw from the result of a query. Declarative on purpose: the agent describes a chart, it never
+    writes the code that draws it."""
+
+    type: Literal["bar", "barh", "line", "area", "pie", "scatter", "histogram"]
+    # The column of the categories (bar, pie), of the horizontal axis (line, area, scatter) or of the values
+    # (histogram).
+    x: str = Field(min_length=1, max_length=200)
+    # The numeric column(s) to plot: several make several series; a histogram needs none, a pie takes exactly one.
+    y: list[str] = Field(default=[], max_length=6)
+    # A column whose values split the data into one series each (instead of several `y` columns).
+    color: str | None = Field(default=None, max_length=200)
+    title: str = Field(min_length=1, max_length=150)
+    x_label: str | None = Field(default=None, max_length=100)
+    y_label: str | None = Field(default=None, max_length=100)
+    stacked: bool = False
+    # Order of the categories: as returned, by x, or by the first y (largest or smallest first).
+    sort: Literal["none", "x", "y_desc", "y_asc"] = "none"
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "ChartSpec":
+        if self.type == "histogram":
+            if self.y or self.color:
+                raise ValueError("a histogram plots the values of `x` only: leave `y` and `color` empty")
+        elif not self.y:
+            raise ValueError("`y` needs at least one numeric column")
+        if self.type == "pie" and (len(self.y) != 1 or self.color):
+            raise ValueError("a pie takes exactly one `y` and no `color`")
+        if self.color and len(self.y) != 1:
+            raise ValueError("with `color`, give exactly one `y` column")
+        return self
+
+
+class ChartIn(BaseModel):
+    query_id: uuid.UUID
+    spec: ChartSpec
+
+
+class ChartOut(BaseModel):
+    id: uuid.UUID
+    status: ChartStatus
+    title: str
+    error: str | None = None
+    # On failure: the columns of the query (name, type), to correct the request.
+    available_columns: list[SqlColumnOut] | None = None
+    width: int | None = None
+    height: int | None = None
+    # Where the image is served (by the backend, to the owner of the conversation) and the markdown that shows it.
+    url: str
+    markdown: str
+
+
+class ChartContextOut(BaseModel):
+    chart_id: uuid.UUID
+    spec: dict
+    sql: str
+    tables: list[dict]
+    # Where the worker writes the PNG: it reports this exact key back when it is done.
+    s3_key: str
+
+
+class ChartCompleteIn(BaseModel):
+    s3_key: str
+    width: int = Field(gt=0, le=4000)
+    height: int = Field(gt=0, le=4000)
+
+
+class ChartFailIn(BaseModel):
+    error: str
+    columns: list[SqlColumnOut] = Field(default=[], max_length=500)
 
 
 class SqlQueryContextOut(BaseModel):

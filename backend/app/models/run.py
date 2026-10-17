@@ -42,6 +42,9 @@ class Run(Base):
     model: Mapped[str | None] = mapped_column(String(255), default=None)
     # Celery task id, kept so a cancel can revoke the task if it has not started yet.
     task_id: Mapped[str | None] = mapped_column(String(255), default=None)
+    # The id the assistant's answer will have: reserved when the run is created so that what the run produces
+    # before it ends (its charts) can already be stored under the message that will show it.
+    answer_message_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), default=uuid.uuid4)
     # The assistant message produced by a COMPLETED run.
     result_message_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("messages.id", ondelete="SET NULL"), default=None

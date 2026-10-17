@@ -1,6 +1,7 @@
 from app.services.actor import Actor
 from app.services.admin import AdminService
 from app.services.analysis import AnalysisService
+from app.services.chart import ChartService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
 from app.services.errors import ConflictError, ForbiddenError, NotFoundError
@@ -15,6 +16,7 @@ __all__ = [
     "ConflictError",
     "ForbiddenError",
     "AnalysisService",
+    "ChartService",
     "CollectionService",
     "ConversationService",
     "FileService",
