@@ -140,6 +140,15 @@ def test_a_failed_query_without_tables_still_reads_well() -> None:
         runner(FakeClient([failed])).run('SELECT * FROM f1."Ventes"')
 
 
+def test_an_error_that_already_ends_with_a_period_does_not_get_a_second_one() -> None:
+    failed = {"id": "q1", "status": "failed", "error": "Relancer l'analyse.", "available_tables": []}
+
+    with pytest.raises(CatalogError) as error:
+        runner(FakeClient([failed])).run('SELECT * FROM f1."Ventes"')
+
+    assert str(error.value) == "Relancer l'analyse. Tables disponibles : aucune."
+
+
 def test_waiting_too_long_is_reported_so_the_agent_can_simplify() -> None:
     client = FakeClient([{"id": "q1", "status": "running"}] * 5)
 
