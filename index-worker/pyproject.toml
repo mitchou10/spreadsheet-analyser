@@ -1,6 +1,6 @@
 [project]
 name = "index-worker"
-version = "0.2.0"
+version = "0.4.0-rc"
 description = "spreadsheet-analyser index worker: keeps the BM25 search indexes of the collections and of the users up to date"
 requires-python = ">=3.12"
 dependencies = [
