@@ -23,10 +23,23 @@ class AnalysisContext:
     analysis_id: uuid.UUID
     file_id: uuid.UUID
     file_name: str
+    collection_id: uuid.UUID
+    collection_name: str
     file_version: int
     content_type: str | None
     size_bytes: int
     source_key: str
+    result_key: str
+
+
+@dataclass
+class IndexableFile:
+    """A file of a collection with a ready analysis: what the search index of the collection is built from."""
+
+    file_id: uuid.UUID
+    file_name: str
+    collection_name: str
+    version: int
     result_key: str
 
 
@@ -116,17 +129,49 @@ class AnalysisService:
         file = await self.files.files.get(analysis.file_id)
         if file is None:
             raise NotFoundError(f"File {analysis.file_id} not found")
+        collection = await self.files.collections.collections.get(file.collection_id)
         # The analysis targets the version it was queued for, even if a newer one was uploaded since.
         return AnalysisContext(
             analysis_id=analysis.id,
             file_id=file.id,
             file_name=file.name,
+            collection_id=file.collection_id,
+            collection_name=collection.name if collection else "",
             file_version=analysis.file_version,
             content_type=file.content_type,
             size_bytes=file.size_bytes,
             source_key=file_key(file.collection_id, file.id, analysis.file_version, file.name),
             result_key=analysis_key(file.collection_id, file.id, analysis.file_version),
         )
+
+    async def ready_for_collection(self, collection_id: uuid.UUID) -> list[IndexableFile]:
+        """Files of the collection whose latest analysis is ready (worker side, no user check)."""
+        collection = await self.files.collections.collections.get(collection_id)
+        if collection is None:
+            raise NotFoundError(f"Collection {collection_id} not found")
+        files = await self.files.files.list_by_collection(collection_id)
+        latest = await self.analyses.latest_by_files([file.id for file in files])
+        return [
+            IndexableFile(file.id, file.name, collection.name, analysis.file_version, analysis.s3_key)
+            for file in files
+            if (analysis := latest.get(file.id)) and analysis.status == AnalysisStatus.READY and analysis.s3_key
+        ]
+
+    async def forget_file(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> None:
+        """A file was deleted: have it removed from its collection's search index. Best effort, because a
+        stale entry is harmless (the agent only searches files that still exist) and the file is already gone."""
+        if self.dispatcher is None:
+            return
+        try:
+            await self.dispatcher.enqueue_index_forget(collection_id, file_id)
+        except Exception:
+            logger.exception("Could not enqueue the removal of file %s from the search index", file_id)
+
+    async def request_index_rebuild(self, collection_id: uuid.UUID) -> None:
+        """Rebuilds a collection's search index from its analyses (backfill, repair). Raises if it cannot be queued."""
+        if self.dispatcher is None:
+            raise RuntimeError("No dispatcher configured")
+        await self.dispatcher.enqueue_index_rebuild(collection_id)
 
     async def start(self, analysis_id: uuid.UUID) -> Analysis:
         """pending -> processing; refused (409) if the user stopped it meanwhile."""

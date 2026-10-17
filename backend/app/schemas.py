@@ -184,6 +184,8 @@ class AnalysisContextOut(BaseModel):
     analysis_id: uuid.UUID
     file_id: uuid.UUID
     file_name: str
+    collection_id: uuid.UUID
+    collection_name: str
     file_version: int
     content_type: str | None
     size_bytes: int
@@ -239,3 +241,12 @@ class AdminPersonOut(BaseModel):
     email: str | None
     user_id: str | None
     collections: list[AdminPersonCollectionOut]
+
+
+class CollectionAnalysisOut(BaseModel):
+    file_id: uuid.UUID
+    file_name: str
+    collection_name: str
+    version: int
+    # S3 key of the file's analyse.json (its latest analysis, ready).
+    result_key: str

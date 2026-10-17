@@ -492,3 +492,63 @@ async def test_internal_run_files_lists_the_agents_scope(client, storage, monkey
 
     assert (item["file_id"], item["file_name"], item["collection_name"]) == (file["id"], "a.xlsx", "Sales")
     assert (item["analysis_status"], item["result_key"]) == ("pending", None)
+
+
+async def test_internal_collection_analyses_feed_the_search_index(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    url = f"/api/internal/collections/{collection['id']}/analyses"
+    assert (await client.get(url)).status_code == 401
+    assert (await client.get(url, headers=worker)).json() == []  # nothing analysed yet
+
+    analysis_id = (await client.get(f"/api/files/{file['id']}/analysis")).json()["id"]
+    context = (await client.get(f"/api/internal/analyses/{analysis_id}/context", headers=worker)).json()
+    assert (context["collection_id"], context["collection_name"]) == (collection["id"], "Sales")
+    await client.post(f"/api/internal/analyses/{analysis_id}/start", headers=worker)
+    storage.objects[context["result_key"]] = {"sheets": []}
+    await client.post(
+        f"/api/internal/analyses/{analysis_id}/complete", json={"s3_key": context["result_key"]}, headers=worker
+    )
+
+    ready = (await client.get(url, headers=worker)).json()
+    assert ready == [
+        {
+            "file_id": file["id"],
+            "file_name": "a.xlsx",
+            "collection_name": "Sales",
+            "version": 1,
+            "result_key": context["result_key"],
+        }
+    ]
+    missing = "/api/internal/collections/00000000-0000-0000-0000-000000000000/analyses"
+    assert (await client.get(missing, headers=worker)).status_code == 404
+
+
+async def test_deleting_a_file_asks_the_worker_to_drop_it_from_the_search_index(client, dispatcher) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+
+    assert (await client.delete(f"/api/files/{file['id']}")).status_code == 204
+
+    assert dispatcher.forgotten == [(uuid.UUID(collection["id"]), uuid.UUID(file["id"]))]
+
+
+async def test_deleting_a_file_still_works_when_the_queue_is_down(client, dispatcher) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    dispatcher.fail = True
+
+    assert (await client.delete(f"/api/files/{file['id']}")).status_code == 204
+
+
+async def test_a_refused_file_deletion_does_not_touch_the_search_index(client, dispatcher) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    await client.post(f"/api/collections/{collection['id']}/access", json={"email": BOB.email})
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.delete(f"/api/files/{file['id']}")).status_code == 403
+
+    assert dispatcher.forgotten == []

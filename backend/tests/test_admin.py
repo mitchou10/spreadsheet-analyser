@@ -177,3 +177,21 @@ async def test_admin_cannot_reach_unknown_collections(api) -> None:
     missing = "00000000-0000-0000-0000-000000000000"
 
     assert (await api.post(f"/api/admin/collections/{missing}/access", json={"email": "a@b.c"})).status_code == 404
+
+
+async def test_admin_can_ask_for_a_search_index_rebuild(api, dispatcher) -> None:
+    login_as(admin=False, user_id="alice", email=ALICE.email)
+    collection = (await api.post("/api/collections", json={"name": "Finance"})).json()
+    url = f"/api/admin/collections/{collection['id']}/search-index"
+
+    assert (await api.post(url)).status_code == 403  # the owner is not an administrator
+
+    login_as(admin=True)
+    assert (await api.post(url)).status_code == 202
+    assert dispatcher.rebuilt == [uuid.UUID(collection["id"])]
+    assert (
+        await api.post("/api/admin/collections/00000000-0000-0000-0000-000000000000/search-index")
+    ).status_code == 404
+
+    dispatcher.fail = True
+    assert (await api.post(url)).status_code == 503
