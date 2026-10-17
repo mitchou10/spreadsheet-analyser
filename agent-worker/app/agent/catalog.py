@@ -167,6 +167,10 @@ class Catalog:
 
     # --- lookups ---
 
+    def entry_by_ref(self, ref: str) -> FileEntry | None:
+        """The file known by exactly this reference (f1...), or None."""
+        return self._by_ref.get(ref)
+
     def resolve_file(self, reference: str) -> FileEntry:
         """Accepts a ref (f1), a file id, or a file name (accents/case ignored, unique prefix allowed)."""
         reference = reference.strip()

@@ -95,6 +95,14 @@ class BackendClient:
         """Everything the requester can read: [{collection_id, name, is_owner, shared_with, files: [...]}]."""
         return self._request("GET", f"/runs/{run_id}/account")
 
+    def create_query(self, run_id: str, sql: str, files: list[dict]) -> dict:
+        """Asks for a SQL query over `files` ([{ref, file_id}], the schema name each is known by in the SQL).
+        Returns the queued query: poll get_query until it is completed or failed."""
+        return self._request("POST", f"/runs/{run_id}/queries", {"sql": sql, "files": files})
+
+    def get_query(self, query_id: str) -> dict:
+        return self._request("GET", f"/queries/{query_id}")
+
     def run_files(self, run_id: str) -> list[dict]:
         """Files the run's agent may look at, each with its latest analysis state and the S3 key of
         analyse.json once ready: [{file_id, file_name, collection_name, version, analysis_status, result_key...}]"""
