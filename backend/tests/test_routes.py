@@ -1,0 +1,202 @@
+from collections.abc import AsyncIterator
+
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.db import get_session
+from app.dependencies import get_actor, get_storage
+from app.main import app
+from app.services import Actor
+from tests.actors import BOB
+
+
+@pytest.fixture
+async def client(session, storage) -> AsyncIterator[AsyncClient]:
+    """API client as the full-access dev user (dev-user / dev@example.com), on the rolled-back test
+    session and the in-memory storage."""
+    app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_storage] = lambda: storage
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http_client:
+        yield http_client
+    app.dependency_overrides.clear()
+
+
+async def _create(client: AsyncClient, name: str = "Sales") -> dict:
+    response = await client.post("/api/collections", json={"name": name, "description": "d"})
+    assert response.status_code == 201
+    return response.json()
+
+
+def _xlsx(name: str = "a.xlsx", content: bytes = b"data") -> list:
+    return [("files", (name, content, "application/octet-stream"))]
+
+
+async def test_create_and_list_collections(client) -> None:
+    created = await _create(client)
+
+    assert created["name"] == "Sales"
+    assert created["is_owner"] is True
+    assert created["file_count"] == 0
+    listed = (await client.get("/api/collections")).json()
+    assert [c["id"] for c in listed] == [created["id"]]
+
+
+async def test_create_collection_validates_name(client) -> None:
+    assert (await client.post("/api/collections", json={"name": ""})).status_code == 422
+
+
+async def test_unknown_collection_is_404(client) -> None:
+    assert (await client.get("/api/collections/00000000-0000-0000-0000-000000000000")).status_code == 404
+
+
+async def test_upload_multiple_files_queues_analysis_and_updates_count(client, storage) -> None:
+    collection = await _create(client)
+
+    response = await client.post(
+        f"/api/collections/{collection['id']}/files",
+        files=[
+            ("files", ("a.xlsx", b"1", "application/octet-stream")),
+            ("files", ("b.csv", b"2", "text/csv")),
+        ],
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert [f["name"] for f in body] == ["a.xlsx", "b.csv"]
+    assert {f["status"] for f in body} == {"pending"}
+    assert body[0]["size_bytes"] == 1
+    assert any(key.endswith("/versions/1/a.xlsx") for key in storage.objects)
+    listed = (await client.get(f"/api/collections/{collection['id']}/files")).json()
+    assert len(listed) == 2
+    assert (await client.get(f"/api/collections/{collection['id']}")).json()["file_count"] == 2
+
+
+async def test_reupload_same_content_is_noop_and_new_content_bumps_version(client) -> None:
+    collection = await _create(client)
+    url = f"/api/collections/{collection['id']}/files"
+
+    first = (await client.post(url, files=_xlsx())).json()[0]
+    again = (await client.post(url, files=_xlsx())).json()[0]
+    changed = (await client.post(url, files=_xlsx(content=b"new"))).json()[0]
+
+    assert again["id"] == first["id"] and again["version"] == 1
+    assert changed["id"] == first["id"] and changed["version"] == 2
+    assert len((await client.get(url)).json()) == 1
+
+
+async def test_upload_rejects_unsupported_extension_and_oversize(client, monkeypatch) -> None:
+    collection = await _create(client)
+    url = f"/api/collections/{collection['id']}/files"
+
+    assert (await client.post(url, files=_xlsx("evil.exe"))).status_code == 415
+
+    monkeypatch.setattr("app.routers.collections._settings.MAX_UPLOAD_BYTES", 3)
+    assert (await client.post(url, files=_xlsx(content=b"toolong"))).status_code == 413
+    assert (await client.get(url)).json() == []
+
+
+async def test_upload_without_files_is_422(client) -> None:
+    collection = await _create(client)
+    assert (await client.post(f"/api/collections/{collection['id']}/files")).status_code == 422
+
+
+async def test_download_and_delete_file(client, storage) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx(content=b"abc"))).json()[0]
+
+    download = await client.get(f"/api/files/{file['id']}/download")
+    assert download.status_code == 200
+    assert download.content == b"abc"
+    assert "a.xlsx" in download.headers["content-disposition"]
+
+    assert (await client.delete(f"/api/files/{file['id']}")).status_code == 204
+    assert (await client.get(f"/api/files/{file['id']}/download")).status_code == 404
+    assert storage.objects == {}
+
+
+async def test_retry_and_stop_analysis(client) -> None:
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+
+    stopped = await client.post(f"/api/files/{file['id']}/analysis/stop")
+    assert stopped.json()["status"] == "stopped"
+
+    retried = await client.post(f"/api/files/{file['id']}/analysis")
+    assert retried.status_code == 202
+    assert retried.json()["status"] == "pending"
+
+
+async def test_delete_collection(client, storage) -> None:
+    collection = await _create(client)
+    await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())
+
+    assert (await client.delete(f"/api/collections/{collection['id']}")).status_code == 204
+    assert (await client.get("/api/collections")).json() == []
+    assert storage.objects == {}
+
+
+async def test_share_flow_and_read_only_for_shared_user(client) -> None:
+    collection = await _create(client)
+    base = f"/api/collections/{collection['id']}"
+    file = (await client.post(f"{base}/files", files=_xlsx())).json()[0]
+
+    shared = await client.post(f"{base}/access", json={"email": " Bob@Example.com "})
+    assert shared.status_code == 201
+    assert shared.json()["email"] == "bob@example.com"
+    assert (await client.post(f"{base}/access", json={"email": "not-an-email"})).status_code == 422
+    assert [a["email"] for a in (await client.get(f"{base}/access")).json()] == ["bob@example.com"]
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    listed = (await client.get("/api/collections")).json()
+    assert [(c["id"], c["is_owner"]) for c in listed] == [(collection["id"], False)]
+    assert (await client.get(f"{base}/files")).status_code == 200
+    assert (await client.get(f"/api/files/{file['id']}/download")).status_code == 200
+    assert (await client.post(f"{base}/files", files=_xlsx("b.xlsx"))).status_code == 403
+    assert (await client.delete(f"/api/files/{file['id']}")).status_code == 403
+    assert (await client.delete(base)).status_code == 403
+    assert (await client.get(f"{base}/access")).status_code == 403
+
+    del app.dependency_overrides[get_actor]
+    assert (await client.delete(f"{base}/access/bob@example.com")).status_code == 204
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.get(base)).status_code == 404
+
+
+async def test_conversation_flow(client) -> None:
+    created = await client.post("/api/conversations", json={})
+    assert created.status_code == 201
+    conversation = created.json()
+    assert conversation["title"] == "Nouvelle conversation"
+
+    collection = await _create(client)
+    sent = await client.post(
+        f"/api/conversations/{conversation['id']}/messages",
+        json={"content": "Résume ce fichier", "collection_ids": [collection["id"]]},
+    )
+    assert sent.status_code == 201
+    assert sent.json()["role"] == "user"
+    assert sent.json()["collection_ids"] == [collection["id"]]
+
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()
+    assert [m["content"] for m in messages] == ["Résume ce fichier"]
+    listed = (await client.get("/api/conversations")).json()
+    assert [(c["id"], c["title"]) for c in listed] == [(conversation["id"], "Résume ce fichier")]
+
+    assert (await client.delete(f"/api/conversations/{conversation['id']}")).status_code == 204
+    assert (await client.get(f"/api/conversations/{conversation['id']}/messages")).status_code == 404
+    assert (await client.get("/api/conversations")).json() == []
+
+
+async def test_send_message_validation_and_privacy(client) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    url = f"/api/conversations/{conversation['id']}/messages"
+
+    assert (await client.post(url, json={"content": ""})).status_code == 422
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert (await client.post(url, json={"content": "x", "file_ids": [unknown]})).status_code == 404
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.get(url)).status_code == 404
+    assert (await client.post(url, json={"content": "x"})).status_code == 404
+    assert (await client.delete(f"/api/conversations/{conversation['id']}")).status_code == 404
+    assert (await client.get("/api/conversations")).json() == []

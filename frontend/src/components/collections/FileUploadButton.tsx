@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button'
 import { Upload } from 'lucide-react'
 
 interface FileUploadButtonProps {
+  isUploading?: boolean
   onFilesSelected: (files: FileList) => void
 }
 
-export function FileUploadButton({ onFilesSelected }: FileUploadButtonProps) {
+export function FileUploadButton({ isUploading = false, onFilesSelected }: FileUploadButtonProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   return (
@@ -24,9 +25,9 @@ export function FileUploadButton({ onFilesSelected }: FileUploadButtonProps) {
           event.target.value = ''
         }}
       />
-      <Button size="sm" className="gap-2" onClick={() => inputRef.current?.click()}>
+      <Button size="sm" className="gap-2" disabled={isUploading} onClick={() => inputRef.current?.click()}>
         <Upload className="size-4" />
-        Importer des fichiers
+        {isUploading ? 'Import en cours…' : 'Importer des fichiers'}
       </Button>
     </>
   )

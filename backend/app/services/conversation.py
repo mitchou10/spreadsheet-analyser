@@ -4,11 +4,21 @@ from collections.abc import Sequence
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Collection, Conversation, ConversationStatus, File, Message, MessageRole
+from app.models import (
+    DEFAULT_CONVERSATION_TITLE,
+    Collection,
+    Conversation,
+    ConversationStatus,
+    File,
+    Message,
+    MessageRole,
+)
 from app.repositories import CollectionRepository, ConversationRepository, FileRepository, MessageRepository
 from app.services.access import CollectionAccessPolicy
 from app.services.actor import Actor
 from app.services.errors import NotFoundError
+
+TITLE_MAX_LENGTH = 60
 
 
 class ConversationService:
@@ -78,6 +88,9 @@ class ConversationService:
                 files=files,
             )
         )
+        # The first user message names the conversation, like in any chat UI.
+        if role == MessageRole.USER and content and conversation.title == DEFAULT_CONVERSATION_TITLE:
+            conversation.title = " ".join(content.split())[:TITLE_MAX_LENGTH]
         # Bump updated_at so the conversation list sorts by latest activity.
         conversation.updated_at = func.now()
         await self.session.commit()

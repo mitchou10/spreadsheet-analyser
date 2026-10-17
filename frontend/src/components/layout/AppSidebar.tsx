@@ -1,3 +1,14 @@
+import { useState } from 'react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Sidebar,
@@ -7,6 +18,7 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
@@ -14,13 +26,14 @@ import {
 } from '@/components/ui/sidebar'
 import { useCurrentUser } from '@/auth/AuthContext'
 import type { Conversation } from '@/types/conversation'
-import { FileSpreadsheet, LogOut, SquarePen } from 'lucide-react'
+import { FileSpreadsheet, LogOut, SquarePen, Trash2 } from 'lucide-react'
 
 interface AppSidebarProps {
   conversations: Conversation[]
   activeId: string | null
   onSelect: (id: string) => void
   onNewChat: () => void
+  onDelete: (id: string) => void
   isCollectionsActive: boolean
   onShowCollections: () => void
 }
@@ -30,10 +43,12 @@ export function AppSidebar({
   activeId,
   onSelect,
   onNewChat,
+  onDelete,
   isCollectionsActive,
   onShowCollections,
 }: AppSidebarProps) {
   const { user, logout } = useCurrentUser()
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
 
   return (
     <Sidebar collapsible="icon" className="h-full">
@@ -74,6 +89,13 @@ export function AppSidebar({
                   >
                     <span className="truncate">{conversation.title}</span>
                   </SidebarMenuButton>
+                  <SidebarMenuAction
+                    showOnHover
+                    aria-label="Supprimer la conversation"
+                    onClick={() => setConversationToDelete(conversation)}
+                  >
+                    <Trash2 />
+                  </SidebarMenuAction>
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
@@ -93,6 +115,29 @@ export function AppSidebar({
           </SidebarMenu>
         )}
       </SidebarFooter>
+
+      <AlertDialog
+        open={conversationToDelete !== null}
+        onOpenChange={(open) => !open && setConversationToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer « {conversationToDelete?.title} » ?</AlertDialogTitle>
+            <AlertDialogDescription>La conversation et ses messages seront supprimés définitivement.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (conversationToDelete) onDelete(conversationToDelete.id)
+                setConversationToDelete(null)
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   )
 }

@@ -12,5 +12,8 @@ export interface SpreadsheetFile {
 export interface CollectionSummary {
   id: string
   name: string
-  files: SpreadsheetFile[]
+  description: string | null
+  fileCount: number
+  // False when the collection was shared with me: read-only.
+  isOwner: boolean
 }

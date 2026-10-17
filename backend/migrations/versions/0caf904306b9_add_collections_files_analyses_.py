@@ -110,7 +110,9 @@ def upgrade() -> None:
         ),
         sa.Column("s3_key", sa.String(length=1024), nullable=True),
         sa.Column("error", sa.String(length=2048), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("clock_timestamp()"), nullable=False
+        ),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["file_id"], ["files.id"], name=op.f("fk_analyses_file_id_files"), ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_analyses")),

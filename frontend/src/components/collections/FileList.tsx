@@ -19,12 +19,14 @@ import { FileSpreadsheet, RotateCw, Square, Trash2 } from 'lucide-react'
 
 interface FileListProps {
   files: SpreadsheetFile[]
+  // Collection shared with me: no retry/stop/delete.
+  readOnly?: boolean
   onRetry: (fileId: string) => void
   onStop: (fileId: string) => void
   onDelete: (fileId: string) => void
 }
 
-export function FileList({ files, onRetry, onStop, onDelete }: FileListProps) {
+export function FileList({ files, readOnly = false, onRetry, onStop, onDelete }: FileListProps) {
   const [selectedFile, setSelectedFile] = useState<SpreadsheetFile | null>(null)
   const [fileToDelete, setFileToDelete] = useState<SpreadsheetFile | null>(null)
 
@@ -46,7 +48,7 @@ export function FileList({ files, onRetry, onStop, onDelete }: FileListProps) {
             <TableHead>Importé le</TableHead>
             <TableHead>Mis à jour le</TableHead>
             <TableHead>Statut</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            {!readOnly && <TableHead className="text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -62,29 +64,31 @@ export function FileList({ files, onRetry, onStop, onDelete }: FileListProps) {
               <TableCell>
                 <FileStatusBadge status={file.status} />
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
-                  {file.status === 'processing' ? (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onStop(file.id)}>
-                      <Square className="size-3.5" />
-                      Stopper
+              {!readOnly && (
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
+                    {file.status === 'processing' ? (
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onStop(file.id)}>
+                        <Square className="size-3.5" />
+                        Stopper
+                      </Button>
+                    ) : (
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onRetry(file.id)}>
+                        <RotateCw className="size-3.5" />
+                        Relancer
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Supprimer le fichier"
+                      onClick={() => setFileToDelete(file)}
+                    >
+                      <Trash2 className="size-3.5" />
                     </Button>
-                  ) : (
-                    <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onRetry(file.id)}>
-                      <RotateCw className="size-3.5" />
-                      Relancer
-                    </Button>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    aria-label="Supprimer le fichier"
-                    onClick={() => setFileToDelete(file)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-              </TableCell>
+                  </div>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>

@@ -10,4 +10,7 @@ class S3Settings(BaseSettings):
     AWS_ENDPOINT_URL_S3: str | None = "http://localhost:9000"
     AWS_S3_BUCKET: str = "spreadsheet-analyser"
 
+    # Per-file cap enforced by the upload route (the whole file is buffered in memory).
+    MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")

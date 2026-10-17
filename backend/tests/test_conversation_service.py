@@ -136,3 +136,24 @@ async def test_set_status_and_delete(session) -> None:
     await service.delete(ALICE, conversation.id)
     with pytest.raises(NotFoundError):
         await service.get(ALICE, conversation.id)
+
+
+async def test_first_user_message_names_the_conversation_once(session) -> None:
+    service = ConversationService(session)
+    conversation = await service.create(ALICE)
+
+    await service.add_message(ALICE, conversation.id, MessageRole.USER, "  Quel est le   total\ndes ventes ?  ")
+    await service.add_message(ALICE, conversation.id, MessageRole.USER, "Et en novembre ?")
+
+    assert (await service.get(ALICE, conversation.id)).title == "Quel est le total des ventes ?"
+
+
+async def test_explicit_title_is_not_overwritten_and_title_is_truncated(session) -> None:
+    service = ConversationService(session)
+    named = await service.create(ALICE, "Mon titre")
+    await service.add_message(ALICE, named.id, MessageRole.USER, "hello")
+    long = await service.create(ALICE)
+    await service.add_message(ALICE, long.id, MessageRole.USER, "x" * 200)
+
+    assert (await service.get(ALICE, named.id)).title == "Mon titre"
+    assert len((await service.get(ALICE, long.id)).title) == 60

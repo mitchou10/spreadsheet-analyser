@@ -52,3 +52,7 @@ down: ## Stop the local stack
 .PHONY: erd
 erd: ## Regenerate docs/data-model.{er,png,svg} from the SQLAlchemy models (needs graphviz)
 	cd $(BACKEND_DIR) && $(UV) run python scripts/generate_erd.py
+
+.PHONY: e2e
+e2e: ## Smoke-test the running stack end to end (login, collections, upload, sharing, chat); needs `make up`
+	cd $(BACKEND_DIR) && $(UV) run python scripts/e2e_smoke.py

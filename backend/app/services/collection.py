@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import AccessCollection, Collection
-from app.repositories import AccessCollectionRepository, CollectionRepository
+from app.repositories import AccessCollectionRepository, CollectionRepository, FileRepository
 from app.services.access import CollectionAccessPolicy
 from app.services.actor import Actor, normalize_email
 from app.services.errors import ForbiddenError, NotFoundError
@@ -19,6 +19,7 @@ class CollectionService:
         self.storage = storage
         self.collections = CollectionRepository(session)
         self.accesses = AccessCollectionRepository(session)
+        self.files = FileRepository(session)
         self.policy = CollectionAccessPolicy(session)
 
     async def create(self, actor: Actor, name: str, description: str | None = None) -> Collection:
@@ -31,6 +32,9 @@ class CollectionService:
     async def list_for_user(self, actor: Actor) -> list[Collection]:
         """Owned and shared-with-me collections."""
         return await self.collections.list_accessible(actor.user_id, normalize_email(actor.email))
+
+    async def file_counts(self, collections: list[Collection]) -> dict[uuid.UUID, int]:
+        return await self.files.count_by_collections([collection.id for collection in collections])
 
     async def get(self, actor: Actor, collection_id: uuid.UUID) -> Collection:
         """Readable by the owner or anyone it was shared with."""

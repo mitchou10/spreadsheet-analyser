@@ -13,6 +13,9 @@ if TYPE_CHECKING:
     from app.models.message import Message
 
 
+DEFAULT_CONVERSATION_TITLE = "Nouvelle conversation"
+
+
 class ConversationStatus(enum.StrEnum):
     ACTIVE = "active"
     # Agent run paused on a tool call awaiting human approval (HITL) - the actual
@@ -26,7 +29,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    title: Mapped[str] = mapped_column(String(255), default="Nouvelle conversation")
+    title: Mapped[str] = mapped_column(String(255), default=DEFAULT_CONVERSATION_TITLE)
     status: Mapped[ConversationStatus] = mapped_column(
         pg_enum(ConversationStatus, "conversation_status"), default=ConversationStatus.ACTIVE
     )
