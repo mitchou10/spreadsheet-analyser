@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.2.0...v0.3.0-rc) (2026-10-17)
+
+
+### Features
+
+* **chart:** rebuild the helm chart on the Muffin base with one deployment per worker ([9ccd2f9](https://github.com/mitchou10/spreadsheet-analyser/commit/9ccd2f96a319dddf71c9c62c36c7ea1c08c3d20e))
+
+
+### Code Refactoring
+
+* split the worker into agent-worker and analysis-worker ([8e09e7e](https://github.com/mitchou10/spreadsheet-analyser/commit/8e09e7e28353aebb0229036e5510c037fa22f50d))
+
 ## [0.2.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.1.0...v0.2.0) (2026-10-17)
 
 
