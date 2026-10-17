@@ -121,3 +121,27 @@ jobs:
             - name: Run tests
               working-directory: analysis-worker
               run: uv run pytest
+
+    unit-tests-index-worker:
+        name: Index worker
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+              with:
+                  python-version: ${{ inputs.PYTHON_VERSION }}
+                  enable-cache: true
+                  cache-dependency-glob: index-worker/uv.lock
+
+            - name: Install index-worker dependencies
+              working-directory: index-worker
+              run: uv sync --group dev
+
+            - name: Run tests
+              working-directory: index-worker
+              run: uv run pytest

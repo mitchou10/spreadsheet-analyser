@@ -11,6 +11,7 @@ FRONTEND_DIR := frontend
 BACKEND_DIR  := backend
 AGENT_WORKER_DIR    := agent-worker
 ANALYSIS_WORKER_DIR := analysis-worker
+INDEX_WORKER_DIR    := index-worker
 
 .DEFAULT_GOAL := help
 
@@ -27,6 +28,7 @@ install: ## Install all service dependencies
 	cd $(BACKEND_DIR) && $(UV) sync --group dev
 	cd $(AGENT_WORKER_DIR) && $(UV) sync --group dev
 	cd $(ANALYSIS_WORKER_DIR) && $(UV) sync --group dev
+	cd $(INDEX_WORKER_DIR) && $(UV) sync --group dev
 
 ## ▸ Lint
 .PHONY: lint
@@ -35,7 +37,8 @@ lint: ## Lint every service
 	cd $(BACKEND_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
 	cd $(AGENT_WORKER_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
 	cd $(ANALYSIS_WORKER_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
-	diff -r -x __pycache__ $(AGENT_WORKER_DIR)/app/search $(ANALYSIS_WORKER_DIR)/app/search
+	cd $(INDEX_WORKER_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
+	diff -r -x __pycache__ $(AGENT_WORKER_DIR)/app/search $(INDEX_WORKER_DIR)/app/search
 
 ## ▸ Test
 .PHONY: test
@@ -43,6 +46,7 @@ test: ## Run every service's test suite
 	cd $(BACKEND_DIR) && $(UV) run pytest
 	cd $(AGENT_WORKER_DIR) && $(UV) run pytest
 	cd $(ANALYSIS_WORKER_DIR) && $(UV) run pytest
+	cd $(INDEX_WORKER_DIR) && $(UV) run pytest
 
 ## ▸ Local stack
 .PHONY: up

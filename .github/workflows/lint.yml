@@ -144,6 +144,33 @@ jobs:
               working-directory: analysis-worker
               run: uv run ruff format --check .
 
+    lint-index-worker:
+        name: Lint index worker
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+              with:
+                  python-version: ${{ inputs.PYTHON_VERSION }}
+                  enable-cache: true
+                  cache-dependency-glob: index-worker/uv.lock
+
+            - name: Install index-worker dependencies
+              working-directory: index-worker
+              run: uv sync --group dev
+
+            - name: Ruff check
+              working-directory: index-worker
+              run: uv run ruff check .
+
+            - name: Ruff format check
+              working-directory: index-worker
+              run: uv run ruff format --check .
     check-search-package:
         name: Check the shared search package
         runs-on: ubuntu-latest
@@ -153,7 +180,7 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
-            # app/search is shipped in both worker images: the analysis worker writes the collections' search
-            # index and the agent worker reads it, so tokenisation and index format must be the same code.
+            # app/search is shipped in two worker images: the index worker writes the saved search indexes and
+            # the agent worker reads them, so tokenisation and index format must be the same code.
             - name: Both workers ship the same app/search
-              run: diff -r -x __pycache__ agent-worker/app/search analysis-worker/app/search
+              run: diff -r -x __pycache__ agent-worker/app/search index-worker/app/search
