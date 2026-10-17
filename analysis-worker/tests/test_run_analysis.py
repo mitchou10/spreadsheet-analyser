@@ -26,6 +26,9 @@ class FakeStorage:
         destination.write_bytes(self.objects[key])
         self.downloaded_to.append(destination)
 
+    def upload_file(self, key: str, source: Path, content_type: str = "application/octet-stream") -> None:
+        self.objects[key] = source.read_bytes()
+
     def upload_json(self, key: str, payload: bytes) -> None:
         self.objects[key] = payload
 
@@ -80,6 +83,39 @@ def test_successful_analysis_downloads_analyses_uploads_and_completes(tmp_path) 
     assert [c["name"] for c in result["sheets"][0]["columns"]] == ["produit", "prix"]
     assert result["sheets"][0]["name"] == "ventes"  # the uploaded file's name, not the temporary copy's
     assert list(tmp_path.iterdir()) == []  # the temporary copy of the file is gone
+
+
+def test_the_sheets_are_stored_as_parquet_next_to_analyse_json_and_described_in_it() -> None:
+    import io
+
+    import pyarrow.parquet as pq
+
+    storage = FakeStorage({SOURCE_KEY: CSV})
+
+    assert execute_analysis("a1", make_client([]), storage) == "ready"
+
+    result = json.loads(storage.objects[RESULT_KEY])
+    assert result["sheets"][0]["table"] == {
+        "rows": 2,
+        "columns": [{"name": "produit", "sql_type": "VARCHAR"}, {"name": "prix", "sql_type": "DOUBLE"}],
+    }
+    table = pq.read_table(io.BytesIO(storage.objects["col/file/versions/1/tables/0.parquet"]))
+    assert table.to_pylist() == [{"produit": "Stylo", "prix": 1.5}, {"produit": "Cahier", "prix": 3.0}]
+
+
+def test_a_failure_while_writing_the_tables_fails_the_analysis_and_leaves_no_analyse_json(monkeypatch) -> None:
+    from app.analysis import task
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(task, "write_tables", boom)
+    calls: list = []
+    storage = FakeStorage({SOURCE_KEY: CSV})
+
+    assert execute_analysis("a1", make_client(calls), storage) == "error"
+
+    assert steps(calls)[-1] == "fail" and RESULT_KEY not in storage.objects
 
 
 def test_stopped_before_start_does_no_work() -> None:

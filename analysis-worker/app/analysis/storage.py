@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -22,6 +23,19 @@ class AnalysisStorage:
     def download(self, key: str, destination: Path) -> None:
         """Streams the object to `destination` in chunks (boto3 multipart transfer)."""
         self._client.download_file(self.bucket, key, str(destination))
+
+    def size(self, key: str) -> int:
+        return self._client.head_object(Bucket=self.bucket, Key=key)["ContentLength"]
+
+    def read_json(self, key: str, max_bytes: int = 64 * 1024 * 1024):
+        """A small JSON object (analyse.json), refused if it is unexpectedly large."""
+        if self.size(key) > max_bytes:
+            raise ValueError(f"{key} is larger than {max_bytes} bytes")
+        return json.loads(self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read())
+
+    def upload_file(self, key: str, source: Path, content_type: str = "application/octet-stream") -> None:
+        """Streams a file from disk (boto3 multipart transfer)."""
+        self._client.upload_file(str(source), self.bucket, key, ExtraArgs={"ContentType": content_type})
 
     def upload_json(self, key: str, payload: bytes) -> None:
         self._client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType="application/json")
