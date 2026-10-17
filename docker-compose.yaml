@@ -69,9 +69,10 @@ services:
       migrate:
         condition: service_completed_successfully
 
-  worker:
+  # Answers chat messages (LangGraph: plan, then answer, searching the analyses). Own image, own queue (agent).
+  agent-worker:
     build:
-      context: worker
+      context: agent-worker
       target: runtime
     environment:
       REDIS_URL: redis://redis:6379/0
@@ -95,14 +96,12 @@ services:
       rustfs:
         condition: service_started
 
-  # Spreadsheet analysis: same image as the agent worker, its own queue, and a memory ceiling so a
-  # pathological file can only ever take down this container (Celery also recycles a child past 600 MB).
+  # Spreadsheet analysis: own image and queue (analysis), and a memory ceiling so a pathological file can only
+  # ever take down this container (the image also recycles a Celery child past 600 MB).
   analysis-worker:
     build:
-      context: worker
+      context: analysis-worker
       target: runtime
-    command:
-      ["celery", "-A", "app.celery_app", "worker", "--loglevel=info", "-Q", "analysis", "--concurrency=2", "--max-memory-per-child=600000"]
     mem_limit: 1g
     environment:
       REDIS_URL: redis://redis:6379/0

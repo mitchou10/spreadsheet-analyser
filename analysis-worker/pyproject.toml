@@ -1,15 +1,12 @@
 [project]
-name = "worker"
+name = "analysis-worker"
 version = "0.2.0"
-description = "spreadsheet-analyser background worker"
+description = "spreadsheet-analyser analysis worker: streaming statistical profile of csv, xlsx, xls and ods files"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.43.114",
     "celery>=5.4.0",
     "httpx>=0.28.1",
-    "langchain-core>=1.6.12",
-    "langchain-openai>=1.7.2",
-    "langgraph>=1.2.16",
     "openpyxl>=3.1.5",
     "redis>=5.2.0",
     "xlrd>=2.0.2",
