@@ -30,8 +30,8 @@ class ConversationService:
         self.files = FileRepository(session)
         self.access = CollectionAccessPolicy(session)
 
-    async def create(self, actor: Actor, title: str | None = None) -> Conversation:
-        conversation = Conversation(user_id=actor.user_id)
+    async def create(self, actor: Actor, title: str | None = None, model: str | None = None) -> Conversation:
+        conversation = Conversation(user_id=actor.user_id, model=model)
         if title:
             conversation.title = title
         await self.conversations.add(conversation)
@@ -45,6 +45,19 @@ class ConversationService:
         conversation = await self.conversations.get(conversation_id)
         if conversation is None or conversation.user_id != actor.user_id:
             raise NotFoundError(f"Conversation {conversation_id} not found")
+        return conversation
+
+    async def update(
+        self, actor: Actor, conversation_id: uuid.UUID, title: str | None = None, model: str | None = None
+    ) -> Conversation:
+        """Renames the conversation and/or switches its model (validating the model is the caller's job)."""
+        conversation = await self.get(actor, conversation_id)
+        if title is not None:
+            conversation.title = title
+        if model is not None:
+            conversation.model = model
+        await self.session.commit()
+        await self.session.refresh(conversation)
         return conversation
 
     async def delete(self, actor: Actor, conversation_id: uuid.UUID) -> None:

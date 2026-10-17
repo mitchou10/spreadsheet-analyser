@@ -62,6 +62,13 @@ class AccessOut(BaseModel):
 
 class ConversationCreate(BaseModel):
     title: str | None = Field(default=None, max_length=255)
+    # An id from GET /models; omitted = the default model.
+    model: str | None = Field(default=None, max_length=255)
+
+
+class ConversationUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    model: str | None = Field(default=None, min_length=1, max_length=255)
 
 
 class ConversationOut(BaseModel):
@@ -69,6 +76,8 @@ class ConversationOut(BaseModel):
 
     id: uuid.UUID
     title: str
+    # The conversation's model; null = the default one.
+    model: str | None
     status: ConversationStatus
     created_at: datetime
     updated_at: datetime
@@ -79,6 +88,8 @@ class MessageCreate(BaseModel):
     # Optional scope: aim this question at some collections / specific files (must be readable by the caller).
     collection_ids: list[uuid.UUID] = []
     file_ids: list[uuid.UUID] = []
+    # Switches the conversation's model from this message on; omitted = keep the conversation's model.
+    model: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -100,6 +111,7 @@ class RunOut(BaseModel):
     conversation_id: uuid.UUID
     # The user message this run answers.
     message_id: uuid.UUID
+    model: str | None
     status: RunStatus
     # Set once the run is COMPLETED: the assistant message to display.
     result_message_id: uuid.UUID | None
@@ -118,6 +130,7 @@ class RunContextOut(BaseModel):
     run_id: uuid.UUID
     conversation_id: uuid.UUID
     user_id: str
+    model: str | None
     messages: list[dict]
     collection_ids: list[uuid.UUID]
     file_ids: list[uuid.UUID]
@@ -138,3 +151,13 @@ class InternalMessageOut(BaseModel):
     collection_ids: list[uuid.UUID]
     file_ids: list[uuid.UUID]
     created_at: datetime
+
+
+class ModelOut(BaseModel):
+    id: str
+    owned_by: str | None
+
+
+class ModelsOut(BaseModel):
+    default: str
+    models: list[ModelOut]

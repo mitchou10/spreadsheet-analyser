@@ -5,19 +5,20 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.db import get_session
-from app.dependencies import get_actor, get_dispatcher, get_storage
+from app.dependencies import get_actor, get_dispatcher, get_model_catalog, get_storage
 from app.main import app
 from app.services import Actor
 from tests.actors import BOB
 
 
 @pytest.fixture
-async def client(session, storage, dispatcher) -> AsyncIterator[AsyncClient]:
+async def client(session, storage, dispatcher, catalog) -> AsyncIterator[AsyncClient]:
     """API client as the full-access dev user (dev-user / dev@example.com), on the rolled-back test
     session and the in-memory storage."""
     app.dependency_overrides[get_session] = lambda: session
     app.dependency_overrides[get_storage] = lambda: storage
     app.dependency_overrides[get_dispatcher] = lambda: dispatcher
+    app.dependency_overrides[get_model_catalog] = lambda: catalog
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http_client:
         yield http_client
     app.dependency_overrides.clear()
@@ -291,3 +292,120 @@ async def test_internal_history_exposes_messages_with_scope(client, monkeypatch)
     assert [(m["role"], m["content"], m["collection_ids"]) for m in history] == [("user", "Résume", [collection["id"]])]
     missing = "/api/internal/conversations/00000000-0000-0000-0000-000000000000/messages"
     assert (await client.get(missing, headers={"Authorization": "Bearer secret"})).status_code == 404
+
+
+async def test_list_models(client, catalog) -> None:
+    response = await client.get("/api/models")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "default": "gpt-test",
+        "models": [{"id": "gpt-test", "owned_by": "openai"}, {"id": "other-model", "owned_by": "acme"}],
+    }
+
+    catalog.down = True
+    assert (await client.get("/api/models")).status_code == 502
+
+
+async def test_send_message_with_a_model(client) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    url = f"/api/conversations/{conversation['id']}/messages"
+
+    picked = await client.post(url, json={"content": "q", "model": "other-model"})
+    assert picked.status_code == 202 and picked.json()["run"]["model"] == "other-model"
+    await client.post(f"/api/runs/{picked.json()['run']['id']}/cancel")
+
+    # The pick sticks to the conversation: later messages keep using it without repeating it.
+    sticky = await client.post(url, json={"content": "q2"})
+    assert sticky.json()["run"]["model"] == "other-model"
+    await client.post(f"/api/runs/{sticky.json()['run']['id']}/cancel")
+
+    unknown = await client.post(url, json={"content": "q3", "model": "nope"})
+    assert unknown.status_code == 422 and "nope" in unknown.json()["detail"]
+    assert len((await client.get(url)).json()) == 2  # the rejected message was not stored
+    assert (await client.get("/api/conversations")).json()[0]["model"] == "other-model"
+
+
+async def test_send_message_with_a_model_when_provider_is_down(client, catalog) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    catalog.down = True
+    url = f"/api/conversations/{conversation['id']}/messages"
+
+    assert (await client.post(url, json={"content": "q", "model": "gpt-test"})).status_code == 502
+    assert (await client.post(url, json={"content": "q"})).status_code == 202  # default needs no provider call
+
+
+async def test_run_context_carries_the_model(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (
+        await client.post(
+            f"/api/conversations/{conversation['id']}/messages", json={"content": "q", "model": "other-model"}
+        )
+    ).json()["run"]
+
+    context = await client.get(f"/api/internal/runs/{run['id']}/context", headers={"Authorization": "Bearer secret"})
+
+    assert context.json()["model"] == "other-model"
+
+
+async def test_conversation_model_lifecycle(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+
+    plain = (await client.post("/api/conversations", json={})).json()
+    assert plain["model"] is None
+    first = (await client.post(f"/api/conversations/{plain['id']}/messages", json={"content": "a"})).json()["run"]
+    assert first["model"] == "gpt-test"  # no model on the conversation: the default
+    await client.post(f"/api/runs/{first['id']}/cancel")
+
+    created = await client.post("/api/conversations", json={"model": "other-model"})
+    assert created.status_code == 201 and created.json()["model"] == "other-model"
+    conversation = created.json()
+
+    run = (await client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "q"})).json()["run"]
+    assert run["model"] == "other-model"
+    context = await client.get(f"/api/internal/runs/{run['id']}/context", headers=worker)
+    assert context.json()["model"] == "other-model"  # what the worker will call
+    await client.post(f"/api/runs/{run['id']}/cancel")
+
+    patched = await client.patch(
+        f"/api/conversations/{conversation['id']}", json={"model": "gpt-test", "title": "Ventes"}
+    )
+    assert (patched.json()["model"], patched.json()["title"]) == ("gpt-test", "Ventes")
+    after = (await client.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "q2"})).json()
+    assert after["run"]["model"] == "gpt-test"
+
+
+async def test_conversation_model_is_validated_on_create_and_patch(client, catalog) -> None:
+    assert (await client.post("/api/conversations", json={"model": "nope"})).status_code == 422
+    conversation = (await client.post("/api/conversations", json={})).json()
+    url = f"/api/conversations/{conversation['id']}"
+
+    assert (await client.patch(url, json={"model": "nope"})).status_code == 422
+    assert (await client.patch(url, json={"model": ""})).status_code == 422
+    assert (await client.patch(url, json={"title": "Renamed"})).json()["title"] == "Renamed"
+
+    catalog.down = True
+    assert (await client.patch(url, json={"model": "gpt-test"})).status_code == 502
+
+
+async def test_patch_conversation_is_private(client) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+
+    assert (await client.patch(f"/api/conversations/{conversation['id']}", json={"title": "x"})).status_code == 404
+
+
+async def test_model_can_be_sent_with_every_message(client) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    url = f"/api/conversations/{conversation['id']}/messages"
+    used = []
+
+    for model in ("gpt-test", "other-model", "gpt-test"):
+        run = (await client.post(url, json={"content": "q", "model": model})).json()["run"]
+        used.append(run["model"])
+        await client.post(f"/api/runs/{run['id']}/cancel")
+
+    assert used == ["gpt-test", "other-model", "gpt-test"]
+    assert (await client.get("/api/conversations")).json()[0]["model"] == "gpt-test"

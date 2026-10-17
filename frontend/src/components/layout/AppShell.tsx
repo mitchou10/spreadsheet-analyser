@@ -2,6 +2,8 @@ import { Link, Navigate, Route, Routes, useLocation, useMatch, useNavigate } fro
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useCollections } from '@/hooks/useCollections'
 import { useConversations } from '@/hooks/useConversations'
+import { useModels } from '@/hooks/useModels'
+import { useState } from 'react'
 import { ChatView } from '../chat/ChatView'
 import { CollectionDetailView } from '../collections/CollectionDetailView'
 import { CollectionsListView } from '../collections/CollectionsListView'
@@ -27,15 +29,22 @@ export function AppShell() {
   const activeCollectionId = useMatch('/collections/:collectionId')?.params.collectionId ?? null
 
   const chat = useConversations(activeId)
+  const modelsList = useModels()
+  // A pick only applies to the conversation it was made in (null = the /chat page of a new conversation).
+  const [pick, setPick] = useState<{ conversationId: string | null; model: string } | null>(null)
   const backend = useCollections(activeCollectionId)
 
   const activeConversation = chat.conversations.find((c) => c.id === activeId) ?? null
   const activeCollection = backend.collections.find((c) => c.id === activeCollectionId) ?? null
+  const conversationModel = activeConversation?.model ?? modelsList.defaultModel
+  const selectedModel = pick && pick.conversationId === activeId ? pick.model : conversationModel
   const error = chat.error ?? backend.error
   const clearError = chat.error ? chat.clearError : backend.clearError
 
   const handleSend = async (content: string) => {
-    const id = await chat.send(content)
+    // Sent with every message: the backend remembers it as the conversation's model.
+    const id = await chat.send(content, selectedModel ?? undefined)
+    if (id) setPick(null)
     // First message from the empty /chat page: the conversation now exists, move to its URL.
     if (id && id !== activeId) navigate(`/chat/${id}`)
   }
@@ -84,6 +93,11 @@ export function AppShell() {
                   <ChatView
                     title={activeConversation?.title ?? null}
                     messages={chat.messages}
+                    models={modelsList.models}
+                    modelsLoading={modelsList.isLoading}
+                    modelsError={modelsList.error}
+                    selectedModel={selectedModel}
+                    onModelChange={(model) => setPick({ conversationId: activeId, model })}
                     isAnswering={chat.isAnswering}
                     onSend={handleSend}
                     onCancel={chat.cancel}

@@ -12,6 +12,7 @@ from app.routers.auth import router as auth_router
 from app.routers.collections import collections_router, files_router
 from app.routers.conversations import router as conversations_router
 from app.routers.health import router as health_router
+from app.routers.models import router as models_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
 from app.services import ConflictError, ForbiddenError, NotFoundError
@@ -41,6 +42,7 @@ app = FastAPI(
         {"name": "Auth", "description": "Login/logout via Keycloak, session management."},
         {"name": "Collections", "description": "Collections, their files (upload) and sharing."},
         {"name": "Conversations", "description": "Chat conversations and their messages (private to their creator)."},
+        {"name": "Models", "description": "LLMs available to the assistant."},
         {"name": "Runs", "description": "Asynchronous assistant runs started by a message."},
         {"name": "Files", "description": "Download, delete and analysis control of a single file."},
         {"name": "Health", "description": "Liveness/readiness of the API and its dependencies."},
@@ -61,6 +63,7 @@ app.include_router(auth_router, prefix="/api/auth")
 app.include_router(collections_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
+app.include_router(models_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")

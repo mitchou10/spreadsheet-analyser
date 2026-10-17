@@ -35,6 +35,11 @@ services:
       AWS_S3_BUCKET: spreadsheet-analyser
       # Shared with the worker: authenticates its calls to /api/internal/*. Dev value only.
       INTERNAL_API_TOKEN: dev-only-internal-token
+      # Provider the GET /api/models list comes from (same variables as the worker).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-4o}
+      LLM_ALLOWED_MODELS: ${LLM_ALLOWED_MODELS:-}
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: spreadsheet-analyser
@@ -72,9 +77,10 @@ services:
       REDIS_URL: redis://redis:6379/0
       BACKEND_URL: http://backend:8000
       INTERNAL_API_TOKEN: dev-only-internal-token
-      # The agent answers with Claude: put ANTHROPIC_API_KEY in your local .env (runs fail without it).
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_MODEL: ${LLM_MODEL:-claude-sonnet-5-5}
+      # OpenAI SDK, any OpenAI-compatible endpoint. Put OPENAI_API_KEY in your local .env (runs fail without it).
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-4o}
     depends_on:
       redis:
         condition: service_healthy

@@ -1,10 +1,19 @@
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, HTTPException, status
 
-from app.dependencies import ActorDep, ConversationServiceDep, RunServiceDep
+from app.dependencies import ActorDep, ConversationServiceDep, ModelCatalogDep, RunServiceDep
 from app.models import Message
-from app.schemas import ConversationCreate, ConversationOut, MessageCreate, MessageOut, RunOut, SendMessageOut
+from app.schemas import (
+    ConversationCreate,
+    ConversationOut,
+    ConversationUpdate,
+    MessageCreate,
+    MessageOut,
+    RunOut,
+    SendMessageOut,
+)
+from app.services.models import ModelNotAvailableError, ModelProviderError
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -28,11 +37,36 @@ async def list_conversations(actor: ActorDep, service: ConversationServiceDep) -
     return [ConversationOut.model_validate(c) for c in await service.list_for_user(actor)]
 
 
-@router.post("", status_code=status.HTTP_201_CREATED, summary="Start a conversation")
+async def _check_model(catalog: ModelCatalogDep, model: str | None) -> None:
+    """422 unless the provider lists `model`; 502 if the provider cannot be asked."""
+    if not model:
+        return
+    try:
+        await catalog.ensure_available(model)
+    except ModelNotAvailableError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
+    except ModelProviderError as error:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
+
+
+@router.post("", status_code=status.HTTP_201_CREATED, summary="Start a conversation, optionally on a given model")
 async def create_conversation(
-    body: ConversationCreate, actor: ActorDep, service: ConversationServiceDep
+    body: ConversationCreate, actor: ActorDep, service: ConversationServiceDep, catalog: ModelCatalogDep
 ) -> ConversationOut:
-    return ConversationOut.model_validate(await service.create(actor, body.title))
+    await _check_model(catalog, body.model)
+    return ConversationOut.model_validate(await service.create(actor, body.title, body.model))
+
+
+@router.patch("/{conversation_id}", summary="Rename a conversation or switch its model")
+async def update_conversation(
+    conversation_id: uuid.UUID,
+    body: ConversationUpdate,
+    actor: ActorDep,
+    service: ConversationServiceDep,
+    catalog: ModelCatalogDep,
+) -> ConversationOut:
+    await _check_model(catalog, body.model)
+    return ConversationOut.model_validate(await service.update(actor, conversation_id, body.title, body.model))
 
 
 @router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a conversation")
@@ -53,12 +87,23 @@ async def list_messages(
     summary="Send a user message; the assistant's answer is produced asynchronously by a run",
 )
 async def send_message(
-    conversation_id: uuid.UUID, body: MessageCreate, actor: ActorDep, service: RunServiceDep
+    conversation_id: uuid.UUID,
+    body: MessageCreate,
+    actor: ActorDep,
+    service: RunServiceDep,
+    catalog: ModelCatalogDep,
 ) -> SendMessageOut:
     """Returns right away with the stored message and its run (poll `GET /runs/{id}` until it is finished).
-    409 while a previous run of this conversation is still in progress."""
+    The run uses the conversation's model (`model` here switches it first). 409 while a previous run is in progress."""
+    await _check_model(catalog, body.model)  # the conversation's own model and the default are trusted
     message, run = await service.send_message(
-        actor, conversation_id, body.content, collection_ids=body.collection_ids, file_ids=body.file_ids
+        actor,
+        conversation_id,
+        body.content,
+        collection_ids=body.collection_ids,
+        file_ids=body.file_ids,
+        model=body.model,
+        default_model=catalog.default,
     )
     return SendMessageOut(message=_message_out(message), run=RunOut.model_validate(run))
 
