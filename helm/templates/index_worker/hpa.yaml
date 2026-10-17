@@ -1,0 +1,36 @@
+{{- if .Values.enabled }}
+{{- /* DaemonSet is excluded on purpose: it has no scale subresource, so an HPA targeting one is
+rejected by the API server. `helper.component.validate` already fails on that combination - this
+guard just keeps the template honest if the validation is ever relaxed. */ -}}
+{{- if and .Values.index_worker.autoscaling.enabled (ne .Values.index_worker.deploymentType "DaemonSet") }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "index_worker")) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: {{ .Values.index_worker.deploymentType }}
+    name: {{ include "helper.componentFullname" (dict "root" . "componentName" "index_worker") }}
+  minReplicas: {{ .Values.index_worker.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.index_worker.autoscaling.maxReplicas }}
+  metrics:
+  {{- if .Values.index_worker.autoscaling.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.index_worker.autoscaling.targetCPUUtilizationPercentage }}
+  {{- end }}
+  {{- if .Values.index_worker.autoscaling.targetMemoryUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.index_worker.autoscaling.targetMemoryUtilizationPercentage }}
+  {{- end }}
+{{- end }}
+{{- end }}
