@@ -1,0 +1,1 @@
+spreadsheet-analyser has been deployed as release {{ .Release.Name }}.

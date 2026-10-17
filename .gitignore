@@ -1,0 +1,32 @@
+# --- Python ---
+__pycache__/
+*.py[codz]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+*.venv/
+
+# --- Node / frontend ---
+node_modules/
+dist/
+.pnpm-store/
+
+# --- Env / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+
+# --- Helm ---
+helm/charts/*.tgz

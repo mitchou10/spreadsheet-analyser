@@ -1,0 +1,18 @@
+{{- range $name, $svc := (dict "frontend" .Values.frontend "backend" .Values.backend) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "spreadsheet-analyser.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "spreadsheet-analyser.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ $.Chart.Name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/component: {{ $name }}
+  ports:
+    - port: {{ $svc.service.port }}
+      targetPort: {{ $svc.port }}
+{{- end }}

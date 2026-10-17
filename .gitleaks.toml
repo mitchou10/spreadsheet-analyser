@@ -1,0 +1,6 @@
+title = "spreadsheet-analyser gitleaks config"
+
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true

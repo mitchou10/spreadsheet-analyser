@@ -1,0 +1,6 @@
+apiVersion: v2
+name: spreadsheet-analyser
+description: Helm chart for spreadsheet-analyser (frontend, backend, worker)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

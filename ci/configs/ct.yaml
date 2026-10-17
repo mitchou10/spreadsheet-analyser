@@ -1,0 +1,18 @@
+remote: origin
+target-branch: main
+# The chart sits at the repository root as `helm/`, so the scanned directory is
+# the root itself; chart-testing treats each subdirectory holding a Chart.yaml
+# as a chart and ignores the rest.
+chart-dirs:
+- .
+helm-extra-args: ''
+validate-chart-schema: false
+validate-chart-values: true
+# The chart version is bumped by the CD (`chore(chart): release helm ...`) once merged, never in
+# the PR itself, so a changed chart file must not require a bump.
+check-version-increment: false
+validate-maintainers: false
+validate-yaml: true
+exclude-deprecated: true
+excluded-charts: []
+debug: true

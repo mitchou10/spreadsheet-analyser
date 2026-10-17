@@ -1,0 +1,25 @@
+frontend:
+  image:
+    repository: ghcr.io/mitchou10/spreadsheet-analyser/frontend
+    tag: ""
+  replicas: 1
+  port: 8080
+  service:
+    port: 80
+
+backend:
+  image:
+    repository: ghcr.io/mitchou10/spreadsheet-analyser/backend
+    tag: ""
+  replicas: 1
+  port: 8000
+  service:
+    port: 80
+  env: {}
+
+worker:
+  image:
+    repository: ghcr.io/mitchou10/spreadsheet-analyser/worker
+    tag: ""
+  replicas: 1
+  env: {}
