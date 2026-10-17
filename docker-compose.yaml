@@ -120,6 +120,29 @@ services:
       rustfs:
         condition: service_started
 
+  # Keeps the BM25 search indexes (of each collection and of each person) up to date in S3. Own image, own queue (index).
+  index-worker:
+    build:
+      context: index-worker
+      target: runtime
+    mem_limit: 1g
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: dev-only-internal-token
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL_S3: http://rustfs:9000
+      AWS_S3_BUCKET: spreadsheet-analyser
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
   postgres:
     image: postgres:16-alpine
     environment:
