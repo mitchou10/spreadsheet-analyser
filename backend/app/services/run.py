@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, Message, MessageRole, Run, RunStatus
 from app.repositories import (
+    AccessCollectionRepository,
     AnalysisRepository,
     CollectionRepository,
     FileRepository,
@@ -56,6 +57,42 @@ class ScopeFile:
     result_key: str | None
 
 
+# The account overview lists the files of everything the person can read: keep that bounded too.
+MAX_ACCOUNT_FILES = 1000
+
+
+@dataclass
+class AccountFile:
+    file_id: uuid.UUID
+    name: str
+    version: int
+    size_bytes: int
+    uploaded_at: datetime
+    analysis_status: AnalysisStatus | None
+
+
+@dataclass
+class AccountCollection:
+    collection_id: uuid.UUID
+    name: str
+    description: str | None
+    created_at: datetime
+    # Owned by the requester, or shared with their email (read-only).
+    is_owner: bool
+    # How many people it is shared with: only known to its owner.
+    shared_with: int | None
+    files: list[AccountFile]
+
+
+@dataclass
+class Account:
+    """Everything the requester can read, whatever the files the question was aimed at."""
+
+    collections: list[AccountCollection]
+    # More than MAX_ACCOUNT_FILES files: the lists of files are cut (the collections are all there).
+    truncated: bool
+
+
 class RunService:
     def __init__(self, session: AsyncSession, dispatcher: RunDispatcher) -> None:
         self.session = session
@@ -65,6 +102,7 @@ class RunService:
         self.collections = CollectionRepository(session)
         self.files = FileRepository(session)
         self.analyses = AnalysisRepository(session)
+        self.accesses = AccessCollectionRepository(session)
         self.conversations = ConversationService(session)
 
     # --- User side ---
@@ -207,6 +245,52 @@ class RunService:
             )
             for file in selected
         ]
+
+    async def account(self, run_id: uuid.UUID) -> Account:
+        """The requester's collections (owned and shared with them) with their files and analysis states, so the
+        agent can answer questions about the account itself (how many collections, files, which are still
+        being analysed...) and not only about the files in scope."""
+        run = await self._require(run_id)
+        conversation = await self.conversations.conversations.get(run.conversation_id)
+        readable = await self.collections.list_accessible(
+            conversation.user_id, normalize_email(run.requester_email or "")
+        )
+        owned_ids = [c.id for c in readable if c.created_by == conversation.user_id]
+        shares: dict[uuid.UUID, int] = {}
+        for access in await self.accesses.list_for_collections(owned_ids):
+            shares[access.collection_id] = shares.get(access.collection_id, 0) + 1
+
+        remaining = MAX_ACCOUNT_FILES
+        truncated = False
+        collections = []
+        for collection in readable:
+            files = await self.files.list_by_collection(collection.id)
+            if len(files) > remaining:
+                files, truncated = files[:remaining], True
+            remaining -= len(files)
+            latest = await self.analyses.latest_by_files([file.id for file in files])
+            collections.append(
+                AccountCollection(
+                    collection_id=collection.id,
+                    name=collection.name,
+                    description=collection.description,
+                    created_at=collection.created_at,
+                    is_owner=collection.id in owned_ids,
+                    shared_with=shares.get(collection.id, 0) if collection.id in owned_ids else None,
+                    files=[
+                        AccountFile(
+                            file_id=file.id,
+                            name=file.name,
+                            version=file.version,
+                            size_bytes=file.size_bytes,
+                            uploaded_at=file.uploaded_at,
+                            analysis_status=(analysis := latest.get(file.id)) and analysis.status,
+                        )
+                        for file in files
+                    ],
+                )
+            )
+        return Account(collections=collections, truncated=truncated)
 
     async def start(self, run_id: uuid.UUID) -> Run:
         run = await self._require(run_id)
