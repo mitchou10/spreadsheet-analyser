@@ -677,3 +677,93 @@ async def test_sharing_over_http_refreshes_the_index_of_the_person(client, dispa
     await client.delete(f"/api/collections/{collection['id']}/access/{BOB.email}")
 
     assert dispatcher.user_rebuilds == [BOB.email, BOB.email]
+
+
+async def _running_run_with_a_ready_file(client, storage):
+    """A run being executed on a collection holding one analysed file; returns (run id, file id)."""
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    file = (await client.post(f"/api/collections/{collection['id']}/files", files=_xlsx())).json()[0]
+    analysis_id = (await client.get(f"/api/files/{file['id']}/analysis")).json()["id"]
+    context = (await client.get(f"/api/internal/analyses/{analysis_id}/context", headers=worker)).json()
+    await client.post(f"/api/internal/analyses/{analysis_id}/start", headers=worker)
+    storage.objects[context["result_key"]] = {"sheets": []}
+    await client.post(
+        f"/api/internal/analyses/{analysis_id}/complete", json={"s3_key": context["result_key"]}, headers=worker
+    )
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+    await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)
+    return run["id"], file["id"]
+
+
+async def test_sql_query_routes_cover_the_agent_and_the_query_worker(client, storage, dispatcher, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, file_id = await _running_run_with_a_ready_file(client, storage)
+    url = f"/api/internal/runs/{run_id}/queries"
+    body = {"sql": 'SELECT * FROM f1."Sheet1"', "files": [{"ref": "f1", "file_id": file_id}]}
+
+    assert (await client.post(url, json=body)).status_code == 401
+    created = await client.post(url, json=body, headers=worker)
+    assert created.status_code == 202
+    query = created.json()
+    assert query["status"] == "queued" and query["result"] is None and dispatcher.queries == [uuid.UUID(query["id"])]
+
+    base = f"/api/internal/queries/{query['id']}"
+    context = (await client.get(f"{base}/context", headers=worker)).json()
+    assert context["sql"] == body["sql"] and context["tables"][0]["ref"] == "f1"
+    assert (await client.post(f"{base}/start", headers=worker)).json()["status"] == "running"
+    assert (await client.post(f"{base}/start", headers=worker)).status_code == 409
+    result = {"columns": [{"name": "n", "type": "BIGINT"}], "rows": [[1], [2]], "truncated": False}
+    assert (await client.post(f"{base}/complete", json=result, headers=worker)).json()["status"] == "completed"
+
+    polled = (await client.get(base, headers=worker)).json()
+    assert polled["status"] == "completed" and polled["result"] == result
+
+
+async def test_a_failed_sql_query_is_polled_with_its_error_and_the_tables(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, file_id = await _running_run_with_a_ready_file(client, storage)
+    body = {"sql": "SELEC", "files": [{"ref": "f1", "file_id": file_id}]}
+    query = (await client.post(f"/api/internal/runs/{run_id}/queries", json=body, headers=worker)).json()
+    base = f"/api/internal/queries/{query['id']}"
+    await client.post(f"{base}/start", headers=worker)
+    tables = [{"table": '"f1"."Sheet1"', "columns": [{"name": "x", "type": "BIGINT"}]}]
+
+    await client.post(f"{base}/fail", json={"error": "SQL invalide", "tables": tables}, headers=worker)
+
+    polled = (await client.get(base, headers=worker)).json()
+    assert (polled["status"], polled["error"], polled["available_tables"]) == ("failed", "SQL invalide", tables)
+
+
+async def test_sql_query_requests_are_validated(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, file_id = await _running_run_with_a_ready_file(client, storage)
+    url = f"/api/internal/runs/{run_id}/queries"
+    one_file = [{"ref": "f1", "file_id": file_id}]
+
+    assert (await client.post(url, json={"sql": "", "files": one_file}, headers=worker)).status_code == 422
+    assert (await client.post(url, json={"sql": "SELECT 1", "files": []}, headers=worker)).status_code == 422
+    bad_ref = [{"ref": 'f1"; DROP', "file_id": file_id}]
+    assert (await client.post(url, json={"sql": "SELECT 1", "files": bad_ref}, headers=worker)).status_code == 422
+    foreign = [{"ref": "f1", "file_id": "00000000-0000-0000-0000-000000000000"}]
+    assert (await client.post(url, json={"sql": "SELECT 1", "files": foreign}, headers=worker)).status_code == 404
+    missing = "/api/internal/queries/00000000-0000-0000-0000-000000000000"
+    assert (await client.get(missing, headers=worker)).status_code == 404
+
+
+async def test_a_sql_result_over_the_ceiling_is_refused(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, file_id = await _running_run_with_a_ready_file(client, storage)
+    body = {"sql": "SELECT 1", "files": [{"ref": "f1", "file_id": file_id}]}
+    query = (await client.post(f"/api/internal/runs/{run_id}/queries", json=body, headers=worker)).json()
+    base = f"/api/internal/queries/{query['id']}"
+    await client.post(f"{base}/start", headers=worker)
+
+    huge = {"columns": [{"name": "n", "type": "BIGINT"}], "rows": [[i] for i in range(501)], "truncated": False}
+
+    assert (await client.post(f"{base}/complete", json=huge, headers=worker)).status_code == 422
