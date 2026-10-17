@@ -43,6 +43,8 @@ backend:
     SESSION_COOKIE_SECURE: "true"
     AWS_ENDPOINT_URL_S3: "https://s3.example.org"
     AWS_S3_BUCKET: "spreadsheet-analyser"
+    # First level of every object key: the same value in the backend, the agent worker and the index worker.
+    S3_KEY_PREFIX: "spreadsheet-analyser"
     AWS_REGION: "us-east-1"
     OPENAI_BASE_URL: ""
     LLM_DEFAULT_MODEL: "gpt-4o"
@@ -63,6 +65,8 @@ agent_worker:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
     AWS_ENDPOINT_URL_S3: "https://s3.example.org"
     AWS_S3_BUCKET: "spreadsheet-analyser"
+    # First level of every object key: the same value in the backend, the agent worker and the index worker.
+    S3_KEY_PREFIX: "spreadsheet-analyser"
     AWS_REGION: "us-east-1"
     OPENAI_BASE_URL: ""
     LLM_DEFAULT_MODEL: "gpt-4o"
@@ -109,6 +113,8 @@ index_worker:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
     AWS_ENDPOINT_URL_S3: "https://s3.example.org"
     AWS_S3_BUCKET: "spreadsheet-analyser"
+    # First level of every object key: the same value in the backend, the agent worker and the index worker.
+    S3_KEY_PREFIX: "spreadsheet-analyser"
     AWS_REGION: "us-east-1"
   resources:
     requests:
