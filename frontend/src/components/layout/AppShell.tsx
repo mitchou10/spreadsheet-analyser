@@ -50,7 +50,9 @@ export function AppShell() {
 
   const activeConversation = chat.conversations.find((c) => c.id === activeId) ?? null
   const activeCollection = backend.collections.find((c) => c.id === activeCollectionId) ?? null
-  const conversationModel = activeConversation?.model ?? modelsList.defaultModel
+  // What the selector shows is what is sent: a model the provider no longer lists falls back to the default.
+  const isListed = (id: string | null | undefined): id is string => !!id && modelsList.models.some((m) => m.id === id)
+  const conversationModel = [activeConversation?.model, modelsList.defaultModel].find(isListed) ?? null
   const selectedModel = pick && pick.conversationId === activeId ? pick.model : conversationModel
   const error = chat.error ?? backend.error
   const clearError = chat.error ? chat.clearError : backend.clearError

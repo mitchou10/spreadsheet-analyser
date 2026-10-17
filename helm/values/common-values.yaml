@@ -47,7 +47,6 @@ backend:
     S3_KEY_PREFIX: "spreadsheet-analyser"
     AWS_REGION: "us-east-1"
     OPENAI_BASE_URL: ""
-    LLM_DEFAULT_MODEL: "gpt-4o"
     LLM_ALLOWED_MODELS: ""
 
 # Answers chat messages (LangGraph: plan, then answer, searching the analyses). Consumes the `agent` queue.
@@ -69,7 +68,6 @@ agent_worker:
     S3_KEY_PREFIX: "spreadsheet-analyser"
     AWS_REGION: "us-east-1"
     OPENAI_BASE_URL: ""
-    LLM_DEFAULT_MODEL: "gpt-4o"
 
 # Profiles the spreadsheets (csv, xlsx, xls, ods). Consumes the `analysis` queue. Never needs the LLM key.
 analysis_worker:

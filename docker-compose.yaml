@@ -40,7 +40,6 @@ services:
       # Provider the GET /api/models list comes from (same variables as the worker).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-4o}
       LLM_ALLOWED_MODELS: ${LLM_ALLOWED_MODELS:-}
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
@@ -90,7 +89,6 @@ services:
       # OpenAI SDK, any OpenAI-compatible endpoint. Put OPENAI_API_KEY in your local .env (runs fail without it).
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-gpt-4o}
     depends_on:
       redis:
         condition: service_healthy
