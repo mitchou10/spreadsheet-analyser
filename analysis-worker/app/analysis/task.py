@@ -18,17 +18,13 @@ def execute_analysis(
     storage: AnalysisStorage,
     limits: Limits | None = None,
     work_dir: Path | None = None,
-    indexer=None,
 ) -> str:
     """pending -> processing -> ready/error for one analysis. Returns the outcome for logs/tests.
 
     The file is streamed from S3 to a temporary file on disk, analysed in a single bounded-memory pass,
     and only the small analyse.json is held in memory. User-caused failures (unsupported or corrupt file)
     are reported with a readable message; anything else is reported as an unexpected error.
-
-    Once the analysis is ready, `indexer` (an app.indexing.IndexManager) adds the file to its collection's saved
-    search index. That is best effort: the analysis is valid either way, and the agent indexes in memory what the
-    saved index does not have."""
+    """
     limits = limits or Limits()
     try:
         client.analysis_start(analysis_id)
@@ -61,9 +57,4 @@ def execute_analysis(
         client.analysis_fail(analysis_id, f"Unexpected error: {type(error).__name__}: {error}")
         return "error"
 
-    if indexer is not None:
-        try:
-            indexer.on_analysis_ready(context, result)
-        except Exception:
-            logger.exception("Analysis %s is ready but the search index of its collection was not updated", analysis_id)
     return "ready"

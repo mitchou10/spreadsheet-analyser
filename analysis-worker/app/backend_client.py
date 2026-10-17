@@ -89,8 +89,3 @@ class BackendClient:
 
     def analysis_fail(self, analysis_id: str, error: str) -> dict:
         return self._request("POST", f"/analyses/{analysis_id}/fail", {"error": error})
-
-    def collection_analyses(self, collection_id: str) -> list[dict]:
-        """Files of a collection whose latest analysis is ready: [{file_id, file_name, collection_name, version,
-        result_key}]. The input of a full rebuild of the collection's search index."""
-        return self._request("GET", f"/collections/{collection_id}/analyses")
