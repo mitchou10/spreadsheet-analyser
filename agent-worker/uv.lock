@@ -4,7 +4,7 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "agent-worker"
-version = "0.2.0"
+version = "0.3.0-rc"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
