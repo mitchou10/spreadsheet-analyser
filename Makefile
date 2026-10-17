@@ -47,3 +47,8 @@ up: ## Start the local stack with docker compose
 .PHONY: down
 down: ## Stop the local stack
 	$(DOCKER_COMPOSE) down
+
+## ▸ Database
+.PHONY: erd
+erd: ## Regenerate docs/data-model.{er,png,svg} from the SQLAlchemy models (needs graphviz)
+	cd $(BACKEND_DIR) && $(UV) run python scripts/generate_erd.py

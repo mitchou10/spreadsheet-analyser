@@ -28,6 +28,11 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://spreadsheet_analyser:spreadsheet_analyser@postgres:5432/spreadsheet_analyser
       REDIS_URL: redis://redis:6379/0
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL_S3: http://rustfs:9000
+      AWS_S3_BUCKET: spreadsheet-analyser
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: spreadsheet-analyser
@@ -52,6 +57,8 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_healthy
+      rustfs:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
 
@@ -91,6 +98,22 @@ services:
       timeout: 3s
       retries: 10
 
+  # S3-compatible object storage (uploaded files + analyse.json). Console on :9001.
+  rustfs:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfsadmin
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rustfs_data:/data
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.2
     command: start-dev --import-realm
@@ -118,3 +141,4 @@ services:
 
 volumes:
   postgres_data:
+  rustfs_data:

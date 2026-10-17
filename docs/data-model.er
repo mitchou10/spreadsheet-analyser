@@ -1,0 +1,61 @@
+[access_collection]
+    *id {label:"UUID"}
+    collection_id {label:"UUID"}
+    created_at {label:"DATETIME"}
+    email {label:"VARCHAR(320)"}
+    granted_by {label:"VARCHAR(255)"}
+[analyses]
+    *id {label:"UUID"}
+    created_at {label:"DATETIME"}
+    error {label:"VARCHAR(2048)"}
+    file_id {label:"UUID"}
+    file_version {label:"INTEGER"}
+    s3_key {label:"VARCHAR(1024)"}
+    status {label:"VARCHAR(10)"}
+    updated_at {label:"DATETIME"}
+[collections]
+    *id {label:"UUID"}
+    created_at {label:"DATETIME"}
+    created_by {label:"VARCHAR(255)"}
+    description {label:"TEXT"}
+    name {label:"VARCHAR(255)"}
+[conversations]
+    *id {label:"UUID"}
+    created_at {label:"DATETIME"}
+    status {label:"VARCHAR(14)"}
+    title {label:"VARCHAR(255)"}
+    updated_at {label:"DATETIME"}
+    user_id {label:"VARCHAR(255)"}
+[files]
+    *id {label:"UUID"}
+    collection_id {label:"UUID"}
+    content_type {label:"VARCHAR(255)"}
+    file_hash {label:"VARCHAR(64)"}
+    name {label:"VARCHAR(255)"}
+    s3_key {label:"VARCHAR(1024)"}
+    size_bytes {label:"BIGINT"}
+    uploaded_at {label:"DATETIME"}
+    uploaded_by {label:"VARCHAR(255)"}
+    version {label:"INTEGER"}
+[message_collections]
+    *collection_id {label:"UUID"}
+    *message_id {label:"UUID"}
+[message_files]
+    *file_id {label:"UUID"}
+    *message_id {label:"UUID"}
+[messages]
+    *id {label:"UUID"}
+    content {label:"TEXT"}
+    conversation_id {label:"UUID"}
+    created_at {label:"DATETIME"}
+    role {label:"VARCHAR(9)"}
+    tool_call_id {label:"VARCHAR(255)"}
+    tool_calls {label:"JSONB"}
+collections 1--* access_collection
+files 1--* analyses
+collections 1--* files
+collections 1--* message_collections
+messages 1--* message_collections
+files 1--* message_files
+messages 1--* message_files
+conversations 1--* messages
