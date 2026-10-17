@@ -35,6 +35,7 @@ lint: ## Lint every service
 	cd $(BACKEND_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
 	cd $(AGENT_WORKER_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
 	cd $(ANALYSIS_WORKER_DIR) && $(UV) run ruff check . && $(UV) run ruff format --check .
+	diff -r -x __pycache__ $(AGENT_WORKER_DIR)/app/search $(ANALYSIS_WORKER_DIR)/app/search
 
 ## ▸ Test
 .PHONY: test

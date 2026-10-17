@@ -143,3 +143,17 @@ jobs:
             - name: Ruff format check
               working-directory: analysis-worker
               run: uv run ruff format --check .
+
+    check-search-package:
+        name: Check the shared search package
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+            # app/search is shipped in both worker images: the analysis worker writes the collections' search
+            # index and the agent worker reads it, so tokenisation and index format must be the same code.
+            - name: Both workers ship the same app/search
+              run: diff -r -x __pycache__ agent-worker/app/search analysis-worker/app/search
