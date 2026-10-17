@@ -2,6 +2,8 @@ import { cn } from '@/lib/utils'
 import { createElement, type ComponentProps } from 'react'
 import ReactMarkdown, { type Components, type ExtraProps } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { isBackendImage } from '@/lib/backendImage'
+import { ChatImage } from './ChatImage'
 
 type Tag = 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'ul' | 'ol' | 'a' | 'blockquote' | 'pre' | 'th' | 'td'
 
@@ -28,6 +30,9 @@ const components: Components = {
   th: styled('th', 'border border-border bg-background/40 px-2 py-1 text-left font-medium'),
   td: styled('td', 'border border-border px-2 py-1'),
   hr: () => <hr className="my-3 border-border" />,
+  // Charts: served by the backend. Any other image a model writes is shown as its text, never loaded.
+  img: ({ src, alt }: ComponentProps<'img'> & ExtraProps) =>
+    isBackendImage(src) ? <ChatImage src={src} alt={alt} /> : <span className="text-muted-foreground">{alt || 'image'}</span>,
   // Inline code gets a chip; inside a <pre> (a fenced block) the chip look is reset.
   code: ({ node, className, ...rest }: ComponentProps<'code'> & ExtraProps) => {
     void node

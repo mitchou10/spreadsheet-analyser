@@ -1,5 +1,7 @@
 import type { MessageTrace } from '@/types/conversation'
 import { ChevronRight, Wrench } from 'lucide-react'
+import { isBackendImage } from '@/lib/backendImage'
+import { ChatImage } from './ChatImage'
 import { Markdown } from './Markdown'
 import { ScopeChip } from './ScopeChip'
 
@@ -11,6 +13,7 @@ const TOOL_LABELS: Record<string, string> = {
   describe_sheet: 'Détail d’une feuille',
   describe_column: 'Détail d’une colonne',
   query_data: 'Requête SQL',
+  create_chart: 'Graphique',
   account_overview: 'Vue d’ensemble du compte',
   account_files: 'Fichiers du compte',
 }
@@ -101,6 +104,30 @@ function QueryStep({ sql, output }: { sql: string; output: string }) {
   )
 }
 
+/** `create_chart`: the chart itself when it was drawn (an error comes back as text), and what was asked. */
+function ChartStep({ args, output }: { args: Record<string, unknown>; output: string }) {
+  let chart: { url?: string; title?: string } | null = null
+  try {
+    chart = JSON.parse(output)
+  } catch {
+    // a refusal or a failure: text
+  }
+  return (
+    <div className="flex flex-col gap-2 border-t px-2.5 py-2 text-xs">
+      {chart && isBackendImage(chart.url) ? (
+        <ChatImage src={chart.url} alt={chart.title} />
+      ) : (
+        <div className="text-destructive">
+          <Markdown>{output}</Markdown>
+        </div>
+      )}
+      <div className="[&_pre]:my-0 [&_pre]:bg-muted/70 [&_pre]:text-[11px]">
+        <Markdown>{fenced(JSON.stringify(args, null, 2), 'json')}</Markdown>
+      </div>
+    </div>
+  )
+}
+
 const argumentsLine = (args: Record<string, unknown>) =>
   Object.entries(args)
     .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
@@ -155,6 +182,8 @@ export function MessageSources({ trace }: { trace: MessageTrace }) {
                     </summary>
                     {step.tool === 'query_data' && typeof step.arguments.sql === 'string' ? (
                       <QueryStep sql={step.arguments.sql} output={step.output} />
+                    ) : step.tool === 'create_chart' ? (
+                      <ChartStep args={step.arguments} output={step.output} />
                     ) : (
                       <div className="max-h-64 overflow-auto border-t px-2.5 py-2 text-xs [&_pre]:my-0 [&_pre]:bg-muted/70 [&_pre]:text-[11px]">
                         <Markdown>{outputAsMarkdown(step.output)}</Markdown>
