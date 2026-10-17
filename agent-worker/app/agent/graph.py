@@ -59,7 +59,7 @@ def _scope_note(last: dict) -> list[BaseMessage]:
     ]
 
 
-def build_graph(llm, client: BackendClient, storage, run_id: str):
+def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: str | None = None):
     """START -> load_history -> load_catalog -> plan -> agent <-> tools -> END.
 
     Input: {"conversation_id": ...}. The graph reads the conversation and the analyses of the files in scope
@@ -79,7 +79,7 @@ def build_graph(llm, client: BackendClient, storage, run_id: str):
         return {"history": history}
 
     def load_catalog(state: AgentState) -> AgentState:
-        holder["catalog"] = Catalog.load(client.run_files(run_id), storage)
+        holder["catalog"] = Catalog.load(client.run_files(run_id), storage, user_email=user_email)
         logger.info("Catalog: %d files in scope", len(holder["catalog"].entries))
         return {"overview": holder["catalog"].overview()}
 
