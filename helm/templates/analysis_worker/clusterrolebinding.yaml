@@ -1,0 +1,19 @@
+{{- if .Values.enabled }}
+{{- /* Gated on `rules` as well, exactly like clusterrole.yaml: without it, an empty `rules` list
+yields a ClusterRoleBinding whose roleRef points at a ClusterRole that was never created. */ -}}
+{{- if and .Values.analysis_worker.serviceAccount.enabled .Values.analysis_worker.serviceAccount.clusterRole.create .Values.analysis_worker.serviceAccount.clusterRole.rules }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "analysis_worker")) | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}
+subjects:
+- kind: ServiceAccount
+  name: {{ .Values.analysis_worker.serviceAccount.name | default (include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker")) }}
+  namespace: {{ .Release.Namespace }}
+{{- end }}
+{{- end }}

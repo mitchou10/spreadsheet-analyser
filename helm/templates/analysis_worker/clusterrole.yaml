@@ -1,0 +1,10 @@
+{{- if .Values.enabled }}
+{{- if and .Values.analysis_worker.serviceAccount.enabled .Values.analysis_worker.serviceAccount.clusterRole.create .Values.analysis_worker.serviceAccount.clusterRole.rules }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "analysis_worker")) | nindent 4 }}
+rules: {{- toYaml .Values.analysis_worker.serviceAccount.clusterRole.rules | nindent 0 }}
+{{- end }}
+{{- end }}
