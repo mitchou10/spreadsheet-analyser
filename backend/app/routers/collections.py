@@ -176,8 +176,11 @@ async def download_file(file_id: uuid.UUID, actor: ActorDep, service: FileServic
 
 
 @files_router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete a file (owner only)")
-async def delete_file(file_id: uuid.UUID, actor: ActorDep, service: FileServiceDep) -> None:
-    await service.delete(actor, file_id)
+async def delete_file(
+    file_id: uuid.UUID, actor: ActorDep, service: FileServiceDep, analyses: AnalysisServiceDep
+) -> None:
+    file = await service.delete(actor, file_id)
+    await analyses.forget_file(file.collection_id, file.id)  # drop it from the collection's search index
 
 
 @files_router.post(

@@ -120,6 +120,9 @@ class AdminService:
         await self.accesses.delete(access)
         await self.session.commit()
 
+    async def get_collection(self, collection_id: uuid.UUID) -> Collection:
+        return await self._collection(collection_id)
+
     async def _collection(self, collection_id: uuid.UUID) -> Collection:
         collection = await self.collections.get(collection_id)
         if collection is None:
