@@ -89,3 +89,19 @@ class BackendClient:
 
     def analysis_fail(self, analysis_id: str, error: str) -> dict:
         return self._request("POST", f"/analyses/{analysis_id}/fail", {"error": error})
+
+    # --- SQL queries (agent -> backend -> this worker) ---
+
+    def query_context(self, query_id: str) -> dict:
+        """{query_id, sql, tables: [{ref, file_id, file_name, result_key}]}: the files the query may read."""
+        return self._request("GET", f"/queries/{query_id}/context")
+
+    def query_start(self, query_id: str) -> dict:
+        return self._request("POST", f"/queries/{query_id}/start")
+
+    def query_complete(self, query_id: str, result: dict) -> dict:
+        return self._request("POST", f"/queries/{query_id}/complete", result)
+
+    def query_fail(self, query_id: str, error: str, tables: list[dict] | None = None) -> dict:
+        """`tables` lists what could be queried (as the SQL must name it), so that the author can correct itself."""
+        return self._request("POST", f"/queries/{query_id}/fail", {"error": error, "tables": tables or []})
