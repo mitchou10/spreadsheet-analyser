@@ -1,0 +1,18 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.analysis_worker.deploymentType "DaemonSet" }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "analysis_worker") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "analysis_worker")) | nindent 4 }}
+spec:
+  revisionHistoryLimit: {{ .Values.analysis_worker.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "analysis_worker") | nindent 6 }}
+  {{- with .Values.analysis_worker.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "analysis_worker" "component" .Values.analysis_worker) | nindent 4 }}
+{{- end }}
+{{- end }}
