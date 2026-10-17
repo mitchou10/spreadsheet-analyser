@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types/conversation'
 import { Bot, User } from 'lucide-react'
+import { Markdown } from './Markdown'
 
 export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
@@ -17,11 +18,12 @@ export function MessageBubble({ message }: { message: Message }) {
       </div>
       <div
         className={cn(
-          'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap',
+          'max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed',
+          isUser && 'whitespace-pre-wrap',
           isUser ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
         )}
       >
-        {message.content}
+        {isUser ? message.content : <Markdown>{message.content}</Markdown>}
       </div>
     </div>
   )
