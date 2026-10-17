@@ -1,21 +1,23 @@
+import uuid
 from collections.abc import AsyncIterator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.db import get_session
-from app.dependencies import get_actor, get_storage
+from app.dependencies import get_actor, get_dispatcher, get_storage
 from app.main import app
 from app.services import Actor
 from tests.actors import BOB
 
 
 @pytest.fixture
-async def client(session, storage) -> AsyncIterator[AsyncClient]:
+async def client(session, storage, dispatcher) -> AsyncIterator[AsyncClient]:
     """API client as the full-access dev user (dev-user / dev@example.com), on the rolled-back test
     session and the in-memory storage."""
     app.dependency_overrides[get_session] = lambda: session
     app.dependency_overrides[get_storage] = lambda: storage
+    app.dependency_overrides[get_dispatcher] = lambda: dispatcher
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http_client:
         yield http_client
     app.dependency_overrides.clear()
@@ -173,9 +175,10 @@ async def test_conversation_flow(client) -> None:
         f"/api/conversations/{conversation['id']}/messages",
         json={"content": "Résume ce fichier", "collection_ids": [collection["id"]]},
     )
-    assert sent.status_code == 201
-    assert sent.json()["role"] == "user"
-    assert sent.json()["collection_ids"] == [collection["id"]]
+    assert sent.status_code == 202
+    assert sent.json()["message"]["role"] == "user"
+    assert sent.json()["message"]["collection_ids"] == [collection["id"]]
+    assert sent.json()["run"]["status"] == "queued"
 
     messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()
     assert [m["content"] for m in messages] == ["Résume ce fichier"]
@@ -200,3 +203,73 @@ async def test_send_message_validation_and_privacy(client) -> None:
     assert (await client.post(url, json={"content": "x"})).status_code == 404
     assert (await client.delete(f"/api/conversations/{conversation['id']}")).status_code == 404
     assert (await client.get("/api/conversations")).json() == []
+
+
+async def _send(client, conversation_id: str, content: str = "q") -> dict:
+    response = await client.post(f"/api/conversations/{conversation_id}/messages", json={"content": content})
+    return response
+
+
+async def test_run_flow_through_internal_api(client, dispatcher, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"X-Internal-Token": "secret"}
+    conversation = (await client.post("/api/conversations", json={})).json()
+
+    sent = await _send(client, conversation["id"], "Résume")
+    run = sent.json()["run"]
+    assert sent.status_code == 202 and run["status"] == "queued"
+    assert dispatcher.enqueued == [uuid.UUID(run["id"])]
+
+    active = await client.get(f"/api/conversations/{conversation['id']}/active-run")
+    assert active.json()["id"] == run["id"]
+    assert (await _send(client, conversation["id"], "again")).status_code == 409
+
+    context = await client.get(f"/api/internal/runs/{run['id']}/context", headers=worker)
+    assert context.json()["messages"] == [{"role": "user", "content": "Résume"}]
+    assert (await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)).json()["status"] == "running"
+    assert (await client.get(f"/api/runs/{run['id']}")).json()["status"] == "running"
+
+    done = await client.post(f"/api/internal/runs/{run['id']}/complete", json={"content": "Réponse"}, headers=worker)
+    assert done.json()["status"] == "completed"
+    assert done.json()["result_message_id"]
+
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()
+    assert [(m["role"], m["content"]) for m in messages] == [("user", "Résume"), ("assistant", "Réponse")]
+    assert (await client.get(f"/api/conversations/{conversation['id']}/active-run")).json() is None
+
+
+async def test_cancel_run_route_and_worker_conflict(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"X-Internal-Token": "secret"}
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+
+    cancelled = await client.post(f"/api/runs/{run['id']}/cancel")
+
+    assert cancelled.json()["status"] == "cancelled"
+    assert (await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)).status_code == 409
+
+
+async def test_internal_api_requires_the_token(client, monkeypatch) -> None:
+    run_id = "00000000-0000-0000-0000-000000000000"
+
+    monkeypatch.delenv("INTERNAL_API_TOKEN", raising=False)
+    assert (await client.post(f"/api/internal/runs/{run_id}/start")).status_code == 503
+
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    assert (await client.post(f"/api/internal/runs/{run_id}/start")).status_code == 401
+    wrong = await client.post(f"/api/internal/runs/{run_id}/start", headers={"X-Internal-Token": "nope"})
+    assert wrong.status_code == 401
+    right = await client.post(f"/api/internal/runs/{run_id}/start", headers={"X-Internal-Token": "secret"})
+    assert right.status_code == 404
+
+
+async def test_runs_are_private_over_http(client) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+
+    assert (await client.get(f"/api/runs/{run['id']}")).status_code == 404
+    assert (await client.post(f"/api/runs/{run['id']}/cancel")).status_code == 404
+    assert (await client.get(f"/api/conversations/{conversation['id']}/active-run")).status_code == 404

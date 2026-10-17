@@ -9,6 +9,7 @@ Usage (stack up via `make up`): uv run python scripts/e2e_smoke.py
 import os
 import re
 import sys
+import time
 from html import unescape
 
 import httpx
@@ -135,9 +136,27 @@ def main() -> int:
             f"{api}/conversations/{conversation['id']}/messages",
             json={"content": "Résume ventes.csv", "collection_ids": [cid], "file_ids": [file_id]},
         )
-        check("send message scoped to collection + file", message.status_code == 201, message.text)
+        check("send message returns 202 with a queued run", message.status_code == 202, message.text)
+        run = message.json()["run"]
+        check("run starts queued", run["status"] == "queued", run)
+        for _ in range(30):  # the worker (Celery) picks it up asynchronously
+            run = client.get(f"{api}/runs/{run['id']}").json()
+            if run["status"] not in ("queued", "running"):
+                break
+            time.sleep(0.5)
+        check("worker completes the run", run["status"] == "completed", run)
         messages = client.get(f"{api}/conversations/{conversation['id']}/messages").json()
         check("message persisted with its scope", messages[0]["file_ids"] == [file_id], messages)
+        check(
+            "assistant reply stored by the worker",
+            [m["role"] for m in messages] == ["user", "assistant"] and messages[1]["id"] == run["result_message_id"],
+            messages,
+        )
+        check(
+            "no active run once finished",
+            client.get(f"{api}/conversations/{conversation['id']}/active-run").json() is None,
+        )
+
         titles = [c["title"] for c in client.get(f"{api}/conversations").json()]
         check("conversation titled from first message", "Résume ventes.csv" in titles, titles)
         check("delete conversation", client.delete(f"{api}/conversations/{conversation['id']}").status_code == 204)

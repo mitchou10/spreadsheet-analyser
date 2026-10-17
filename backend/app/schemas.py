@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import AnalysisStatus, ConversationStatus, MessageRole
+from app.models import AnalysisStatus, ConversationStatus, MessageRole, RunStatus
 
 
 class CollectionCreate(BaseModel):
@@ -91,3 +91,41 @@ class MessageOut(BaseModel):
     collection_ids: list[uuid.UUID]
     file_ids: list[uuid.UUID]
     created_at: datetime
+
+
+class RunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    # The user message this run answers.
+    message_id: uuid.UUID
+    status: RunStatus
+    # Set once the run is COMPLETED: the assistant message to display.
+    result_message_id: uuid.UUID | None
+    error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+class SendMessageOut(BaseModel):
+    message: MessageOut
+    run: RunOut
+
+
+class RunContextOut(BaseModel):
+    run_id: uuid.UUID
+    conversation_id: uuid.UUID
+    user_id: str
+    messages: list[dict]
+    collection_ids: list[uuid.UUID]
+    file_ids: list[uuid.UUID]
+
+
+class RunCompleteIn(BaseModel):
+    content: str = Field(min_length=1)
+
+
+class RunFailIn(BaseModel):
+    error: str

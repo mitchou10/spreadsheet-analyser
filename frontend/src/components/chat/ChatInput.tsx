@@ -1,18 +1,20 @@
 import { useState, type KeyboardEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { ArrowUp } from 'lucide-react'
+import { ArrowUp, Square } from 'lucide-react'
 
 interface ChatInputProps {
+  isAnswering: boolean
   onSend: (content: string) => void
+  onCancel: () => void
 }
 
-export function ChatInput({ onSend }: ChatInputProps) {
+export function ChatInput({ isAnswering, onSend, onCancel }: ChatInputProps) {
   const [value, setValue] = useState('')
 
   const submit = () => {
     const trimmed = value.trim()
-    if (!trimmed) return
+    if (!trimmed || isAnswering) return
     onSend(trimmed)
     setValue('')
   }
@@ -35,9 +37,15 @@ export function ChatInput({ onSend }: ChatInputProps) {
           rows={1}
           className="max-h-40 min-h-11 resize-none"
         />
-        <Button size="icon" onClick={submit} disabled={!value.trim()}>
-          <ArrowUp className="size-4" />
-        </Button>
+        {isAnswering ? (
+          <Button size="icon" variant="outline" aria-label="Arrêter la réponse" onClick={onCancel}>
+            <Square className="size-4" />
+          </Button>
+        ) : (
+          <Button size="icon" aria-label="Envoyer" onClick={submit} disabled={!value.trim()}>
+            <ArrowUp className="size-4" />
+          </Button>
+        )}
       </div>
     </div>
   )

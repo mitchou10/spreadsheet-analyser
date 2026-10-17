@@ -4,6 +4,7 @@ from app.repositories.collection import CollectionRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.file import FileRepository
 from app.repositories.message import MessageRepository
+from app.repositories.run import RunRepository
 
 __all__ = [
     "AccessCollectionRepository",
@@ -12,4 +13,5 @@ __all__ = [
     "ConversationRepository",
     "FileRepository",
     "MessageRepository",
+    "RunRepository",
 ]

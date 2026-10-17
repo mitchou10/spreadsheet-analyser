@@ -2,9 +2,9 @@ import uuid
 
 from fastapi import APIRouter, status
 
-from app.dependencies import ActorDep, ConversationServiceDep
-from app.models import Message, MessageRole
-from app.schemas import ConversationCreate, ConversationOut, MessageCreate, MessageOut
+from app.dependencies import ActorDep, ConversationServiceDep, RunServiceDep
+from app.models import Message
+from app.schemas import ConversationCreate, ConversationOut, MessageCreate, MessageOut, RunOut, SendMessageOut
 
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
@@ -47,16 +47,23 @@ async def list_messages(
     return [_message_out(m) for m in await service.list_messages(actor, conversation_id)]
 
 
-@router.post("/{conversation_id}/messages", status_code=status.HTTP_201_CREATED, summary="Send a user message")
+@router.post(
+    "/{conversation_id}/messages",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Send a user message; the assistant's answer is produced asynchronously by a run",
+)
 async def send_message(
-    conversation_id: uuid.UUID, body: MessageCreate, actor: ActorDep, service: ConversationServiceDep
-) -> MessageOut:
-    message = await service.add_message(
-        actor,
-        conversation_id,
-        MessageRole.USER,
-        body.content,
-        collection_ids=body.collection_ids,
-        file_ids=body.file_ids,
+    conversation_id: uuid.UUID, body: MessageCreate, actor: ActorDep, service: RunServiceDep
+) -> SendMessageOut:
+    """Returns right away with the stored message and its run (poll `GET /runs/{id}` until it is finished).
+    409 while a previous run of this conversation is still in progress."""
+    message, run = await service.send_message(
+        actor, conversation_id, body.content, collection_ids=body.collection_ids, file_ids=body.file_ids
     )
-    return _message_out(message)
+    return SendMessageOut(message=_message_out(message), run=RunOut.model_validate(run))
+
+
+@router.get("/{conversation_id}/active-run", summary="The run currently in progress, if any (null otherwise)")
+async def get_active_run(conversation_id: uuid.UUID, actor: ActorDep, service: RunServiceDep) -> RunOut | None:
+    run = await service.get_active(actor, conversation_id)
+    return RunOut.model_validate(run) if run else None

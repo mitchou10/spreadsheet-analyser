@@ -1,5 +1,5 @@
 import { apiFetch, jsonBody } from '@/lib/api'
-import type { Conversation, Message } from '@/types/conversation'
+import type { Conversation, Message, Run, RunStatus } from '@/types/conversation'
 
 interface ConversationDto {
   id: string
@@ -11,6 +11,14 @@ interface MessageDto {
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string | null
 }
+
+interface RunDto {
+  id: string
+  status: RunStatus
+  error: string | null
+}
+
+const toRun = ({ id, status, error }: RunDto): Run => ({ id, status, error })
 
 // system/tool messages and assistant tool-call turns (no text) are plumbing for the agent, not chat bubbles.
 const toMessage = (dto: MessageDto): Message[] =>
@@ -31,10 +39,20 @@ export const deleteConversation = (id: string) => apiFetch<void>(`/conversations
 export const listMessages = async (conversationId: string): Promise<Message[]> =>
   (await apiFetch<MessageDto[]>(`/conversations/${conversationId}/messages`)).flatMap(toMessage)
 
-export const sendMessage = async (conversationId: string, content: string): Promise<Message[]> =>
-  toMessage(
-    await apiFetch<MessageDto>(`/conversations/${conversationId}/messages`, {
-      method: 'POST',
-      body: jsonBody({ content }),
-    }),
-  )
+/** Stores the user message and queues the assistant's run; the answer arrives later (poll the run). */
+export async function sendMessage(conversationId: string, content: string): Promise<{ messages: Message[]; run: Run }> {
+  const sent = await apiFetch<{ message: MessageDto; run: RunDto }>(`/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    body: jsonBody({ content }),
+  })
+  return { messages: toMessage(sent.message), run: toRun(sent.run) }
+}
+
+export const getActiveRun = async (conversationId: string): Promise<Run | null> => {
+  const run = await apiFetch<RunDto | null>(`/conversations/${conversationId}/active-run`)
+  return run ? toRun(run) : null
+}
+
+export const getRun = async (runId: string) => toRun(await apiFetch<RunDto>(`/runs/${runId}`))
+
+export const cancelRun = async (runId: string) => toRun(await apiFetch<RunDto>(`/runs/${runId}/cancel`, { method: 'POST' }))
