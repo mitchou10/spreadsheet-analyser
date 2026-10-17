@@ -13,10 +13,16 @@ chaque message** : il est calculé une fois, enregistré dans S3 et tenu à jour
 ## Deux niveaux d'index, dans S3
 
 ```text
-<collection_id>/search-index.json.gz              l'index d'une collection (ses fichiers analysés)
-users/<sha256 de l'email>/search-index.json.gz    l'index d'une personne : tout ce qu'elle peut lire
-<collection_id>/<file_id>/versions/<n>/analyse.json     l'analyse d'un fichier (inchangée)
+<projet>/<collection_id>/search-index.json.gz              l'index d'une collection (ses fichiers analysés)
+<projet>/users/<sha256 de l'email>/search-index.json.gz    l'index d'une personne : tout ce qu'elle peut lire
+<projet>/<collection_id>/<file_id>/versions/<n>/analyse.json     l'analyse d'un fichier (inchangée)
 ```
+
+`<projet>` est la valeur de `S3_KEY_PREFIX` (`spreadsheet-analyser` par défaut), le premier niveau de toutes les clés. Elle
+doit être **la même** dans le backend, l'`agent-worker` et l'`index-worker` : ce sont eux qui construisent ou lisent les
+clés des index (l'`analysis-worker` reçoit ses clés du backend). Si elle diffère, l'agent ne trouve pas les index et
+retombe sur l'indexation en mémoire. Les index écrits avant l'ajout de ce niveau ne sont plus lus ; ils sont
+recréés à la prochaine mise à jour de la collection (ou avec les routes d'administration) et supprimés avec elle.
 
 - **Index de collection** : un document par feuille et par colonne de chaque fichier analysé.
 - **Index d'utilisateur** : la fusion des index de collection de toutes les collections que la personne peut lire (les

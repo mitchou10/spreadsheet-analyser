@@ -9,9 +9,14 @@ Code : `analysis-worker/app/analysis/` (`readers.py` lit les fichiers, `profile.
 ## Où il est enregistré
 
 ```
-<collection_id>/<file_id>/versions/<version>/<nom-du-fichier>   le fichier brut importé
-<collection_id>/<file_id>/versions/<version>/analyse.json       le profil décrit ici
+<projet>/<collection_id>/<file_id>/versions/<version>/<nom-du-fichier>   le fichier brut importé
+<projet>/<collection_id>/<file_id>/versions/<version>/analyse.json       le profil décrit ici
 ```
+
+`<projet>` est le premier niveau de toutes les clés S3 (`S3_KEY_PREFIX`, `spreadsheet-analyser` par défaut) : un même
+bucket peut ainsi héberger plusieurs projets. Les objets écrits avant l'ajout de ce niveau gardent leur clé d'origine
+(sans `<projet>/`) : la clé de chaque fichier est enregistrée en base, et c'est elle, pas le préfixe courant, qui sert à
+retrouver ses versions et son `analyse.json`.
 
 - Une analyse porte sur **une version** du fichier. Importer une nouvelle version crée une nouvelle analyse,
   l'`analyse.json` des versions précédentes reste en place.
