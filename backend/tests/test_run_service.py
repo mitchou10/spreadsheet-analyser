@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models import MessageRole, RunStatus
-from app.services import ConflictError, ConversationService, NotFoundError, RunService
+from app.services import Actor, ConflictError, ConversationService, NotFoundError, RunService
 from tests.actors import ALICE, BOB
 
 
@@ -228,3 +228,23 @@ async def test_scope_files_never_leaks_what_the_requester_cannot_read(session, d
     _, run = await service.send_message(BOB, conversation.id, "q")
 
     assert {f.file_name for f in await service.scope_files(run.id)} == {"d.csv"}  # not Alice's files
+
+
+async def test_the_run_context_carries_the_requesters_email(setup) -> None:
+    service, conversation = setup
+    _, run = await service.send_message(ALICE, conversation.id, "q")
+
+    assert (await service.context(run.id)).requester_email == ALICE.email
+
+
+async def test_the_first_question_attributes_legacy_collections_to_their_owner(session, storage, dispatcher) -> None:
+    from app.services import CollectionService
+
+    legacy = await CollectionService(session, storage).create(Actor(user_id=ALICE.user_id), "Legacy")
+    conversation = await ConversationService(session).create(ALICE)
+    service = RunService(session, dispatcher)
+
+    await service.send_message(ALICE, conversation.id, "q")
+
+    assert (await CollectionService(session, storage).get(ALICE, legacy.id)).created_by_email == ALICE.email
+    assert dispatcher.user_rebuilds == [ALICE.email]

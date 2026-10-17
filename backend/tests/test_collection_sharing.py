@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 
 from app.models import MessageRole
@@ -152,3 +154,78 @@ async def test_revoked_user_can_no_longer_scope_messages_to_the_collection(sessi
 
     with pytest.raises(NotFoundError):
         await conversations.add_message(BOB, conversation.id, MessageRole.USER, "q", collection_ids=[collection.id])
+
+
+async def test_sharing_and_revoking_refresh_the_search_index_of_that_person(session, storage, dispatcher) -> None:
+    service = CollectionService(session, storage, dispatcher)
+    collection = await service.create(ALICE, "Sales")
+
+    await service.share(ALICE, collection.id, " Bob@Example.com ")
+    assert dispatcher.user_rebuilds == ["bob@example.com"]  # normalised, and only that person
+
+    await service.revoke(ALICE, collection.id, "BOB@example.com")
+    assert dispatcher.user_rebuilds == ["bob@example.com", "bob@example.com"]
+
+
+async def test_deleting_a_collection_refreshes_the_index_of_everyone_who_could_read_it(
+    session, storage, dispatcher
+) -> None:
+    service = CollectionService(session, storage, dispatcher)
+    collection = await service.create(ALICE, "Sales")
+    await service.share(ALICE, collection.id, BOB.email)
+    await service.share(ALICE, collection.id, "carol@example.com")
+    dispatcher.user_rebuilds.clear()
+
+    await service.delete(ALICE, collection.id)
+
+    assert dispatcher.user_rebuilds == sorted([ALICE.email, BOB.email, "carol@example.com"])
+
+
+async def test_an_unreachable_queue_never_blocks_sharing(session, storage, dispatcher) -> None:
+    service = CollectionService(session, storage, dispatcher)
+    collection = await service.create(ALICE, "Sales")
+    dispatcher.fail = True
+
+    access = await service.share(ALICE, collection.id, BOB.email)
+
+    assert access.email == BOB.email
+
+
+async def test_the_audience_of_a_collection_is_its_owner_and_the_people_it_is_shared_with(session, storage) -> None:
+    service = CollectionService(session, storage)
+    collection = await service.create(ALICE, "Sales")
+    await service.share(ALICE, collection.id, BOB.email)
+    await service.share(ALICE, collection.id, "carol@example.com")
+
+    owner, shared = await service.audience(collection.id)
+
+    assert owner == ALICE.email and sorted(shared) == [BOB.email, "carol@example.com"]
+    with pytest.raises(NotFoundError):
+        await service.audience(uuid.UUID(int=0))
+
+
+async def test_readable_collections_by_email_are_the_owned_and_the_shared_ones(session, storage) -> None:
+    service = CollectionService(session, storage)
+    mine = await service.create(ALICE, "Mine")
+    theirs = await service.create(BOB, "Theirs")
+    await service.create(BOB, "Private")
+    await service.share(BOB, theirs.id, ALICE.email)
+
+    assert set(await service.readable_collection_ids(" Alice@Example.com ")) == {mine.id, theirs.id}
+    assert await service.readable_collection_ids("nobody@example.com") == []
+
+
+async def test_collections_created_before_emails_were_recorded_get_their_owners_email(
+    session, storage, dispatcher
+) -> None:
+    service = CollectionService(session, storage, dispatcher)
+    legacy = await service.create(Actor(user_id="alice"), "Legacy")  # no email known at creation
+    assert legacy.created_by_email is None
+
+    listed = await service.list_for_user(ALICE)
+
+    assert [c.id for c in listed] == [legacy.id]
+    assert (await service.get(ALICE, legacy.id)).created_by_email == ALICE.email
+    assert dispatcher.user_rebuilds == [ALICE.email]  # their index now has to include it
+    await service.list_for_user(ALICE)
+    assert dispatcher.user_rebuilds == [ALICE.email]  # nothing left to backfill: no second rebuild
