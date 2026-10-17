@@ -157,3 +157,47 @@ async def test_explicit_title_is_not_overwritten_and_title_is_truncated(session)
 
     assert (await service.get(ALICE, named.id)).title == "Mon titre"
     assert len((await service.get(ALICE, long.id)).title) == 60
+
+
+async def test_messages_are_paged_from_the_newest_back(session) -> None:
+    service = ConversationService(session)
+    conversation = await service.create(ALICE)
+    for n in range(1, 8):
+        await service.add_message(ALICE, conversation.id, MessageRole.USER, f"m{n}")
+
+    latest, more = await service.page_messages(ALICE, conversation.id, limit=3)
+    assert [m.content for m in latest] == ["m5", "m6", "m7"]
+    assert more is True
+
+    middle, more = await service.page_messages(ALICE, conversation.id, limit=3, before_id=latest[0].id)
+    assert [m.content for m in middle] == ["m2", "m3", "m4"]
+    assert more is True
+
+    oldest, more = await service.page_messages(ALICE, conversation.id, limit=3, before_id=middle[0].id)
+    assert [m.content for m in oldest] == ["m1"]
+    assert more is False
+
+
+async def test_a_page_of_a_short_conversation_has_no_more(session) -> None:
+    service = ConversationService(session)
+    conversation = await service.create(ALICE)
+    await service.add_message(ALICE, conversation.id, MessageRole.USER, "only")
+
+    page, more = await service.page_messages(ALICE, conversation.id, limit=30)
+
+    assert [m.content for m in page] == ["only"]
+    assert more is False
+
+
+async def test_paging_is_private_and_the_cursor_must_belong_to_the_conversation(session) -> None:
+    service = ConversationService(session)
+    mine = await service.create(ALICE)
+    other = await service.create(ALICE)
+    message = await service.add_message(ALICE, other.id, MessageRole.USER, "elsewhere")
+
+    with pytest.raises(NotFoundError):
+        await service.page_messages(BOB, mine.id, limit=5)
+    with pytest.raises(NotFoundError):
+        await service.page_messages(ALICE, mine.id, limit=5, before_id=message.id)
+    with pytest.raises(NotFoundError):
+        await service.page_messages(ALICE, mine.id, limit=5, before_id=uuid.uuid4())

@@ -63,7 +63,9 @@ async def start_run(run_id: uuid.UUID, service: RunServiceDep) -> RunOut:
 
 @internal_router.post("/runs/{run_id}/complete", summary="Store the assistant reply, running -> completed")
 async def complete_run(run_id: uuid.UUID, body: RunCompleteIn, service: RunServiceDep) -> RunOut:
-    return RunOut.model_validate(await service.complete(run_id, body.content))
+    return RunOut.model_validate(
+        await service.complete(run_id, body.content, body.trace.model_dump() if body.trace else None)
+    )
 
 
 @internal_router.post("/runs/{run_id}/fail", summary="Mark the run failed")

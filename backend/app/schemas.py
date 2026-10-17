@@ -92,6 +92,40 @@ class MessageCreate(BaseModel):
     model: str | None = None
 
 
+class TraceStep(BaseModel):
+    """One tool call of the agent: what it asked and what it got back (the output is cut by the worker)."""
+
+    tool: str = Field(max_length=100)
+    arguments: dict = {}
+    output: str = Field(default="", max_length=8000)
+
+
+class TraceFile(BaseModel):
+    file_id: str = Field(max_length=64)
+    file_name: str = Field(max_length=255)
+    collection_name: str = Field(default="", max_length=255)
+
+
+class RunTrace(BaseModel):
+    """What the agent worked from to produce an answer: its plan, the files in scope and its tool calls."""
+
+    plan: str = Field(default="", max_length=8000)
+    files: list[TraceFile] = Field(default=[], max_length=200)
+    steps: list[TraceStep] = Field(default=[], max_length=50)
+
+
+class MessageSourceCollection(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class MessageSourceFile(BaseModel):
+    id: uuid.UUID
+    name: str
+    collection_id: uuid.UUID
+    collection_name: str
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     conversation_id: uuid.UUID
@@ -101,7 +135,18 @@ class MessageOut(BaseModel):
     tool_call_id: str | None
     collection_ids: list[uuid.UUID]
     file_ids: list[uuid.UUID]
+    # The same scope with names, to show what a question was about (a file with the collection it comes from).
+    collections: list[MessageSourceCollection]
+    files: list[MessageSourceFile]
+    # Assistant answers only: how it was produced (plan, files consulted, tool calls).
+    trace: RunTrace | None = None
     created_at: datetime
+
+
+class MessagePage(BaseModel):
+    # Oldest first. `has_more`: older messages exist (ask again with `before` = the first item's id).
+    items: list[MessageOut]
+    has_more: bool
 
 
 class RunOut(BaseModel):
@@ -139,6 +184,7 @@ class RunContextOut(BaseModel):
 
 class RunCompleteIn(BaseModel):
     content: str = Field(min_length=1)
+    trace: RunTrace | None = None
 
 
 class RunFailIn(BaseModel):

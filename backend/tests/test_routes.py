@@ -181,7 +181,7 @@ async def test_conversation_flow(client) -> None:
     assert sent.json()["message"]["collection_ids"] == [collection["id"]]
     assert sent.json()["run"]["status"] == "queued"
 
-    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
     assert [m["content"] for m in messages] == ["Résume ce fichier"]
     listed = (await client.get("/api/conversations")).json()
     assert [(c["id"], c["title"]) for c in listed] == [(conversation["id"], "Résume ce fichier")]
@@ -189,6 +189,36 @@ async def test_conversation_flow(client) -> None:
     assert (await client.delete(f"/api/conversations/{conversation['id']}")).status_code == 204
     assert (await client.get(f"/api/conversations/{conversation['id']}/messages")).status_code == 404
     assert (await client.get("/api/conversations")).json() == []
+
+
+async def test_messages_name_their_sources_with_the_collection_of_each_file(client, storage) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    collection = await _create(client)
+    uploaded = (
+        await client.post(
+            f"/api/collections/{collection['id']}/files", files=[("files", ("ventes.csv", b"a", "text/csv"))]
+        )
+    ).json()
+
+    sent = await client.post(
+        f"/api/conversations/{conversation['id']}/messages",
+        json={"content": "q", "collection_ids": [collection["id"]], "file_ids": [uploaded[0]["id"]]},
+    )
+
+    assert sent.status_code == 202
+    expected_file = {
+        "id": uploaded[0]["id"],
+        "name": "ventes.csv",
+        "collection_id": collection["id"],
+        "collection_name": collection["name"],
+    }
+    expected_collection = {"id": collection["id"], "name": collection["name"]}
+    message = sent.json()["message"]
+    assert message["files"] == [expected_file]
+    assert message["collections"] == [expected_collection]
+    listed = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
+    assert listed[0]["files"] == [expected_file]
+    assert listed[0]["collections"] == [expected_collection]
 
 
 async def test_send_message_validation_and_privacy(client) -> None:
@@ -234,9 +264,46 @@ async def test_run_flow_through_internal_api(client, dispatcher, monkeypatch) ->
     assert done.json()["status"] == "completed"
     assert done.json()["result_message_id"]
 
-    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
     assert [(m["role"], m["content"]) for m in messages] == [("user", "Résume"), ("assistant", "Réponse")]
     assert (await client.get(f"/api/conversations/{conversation['id']}/active-run")).json() is None
+
+
+async def test_the_agents_trace_is_stored_with_the_answer_and_listed_with_the_messages(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+    await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)
+    trace = {
+        "plan": "Chercher la colonne prix",
+        "files": [{"file_id": "f1", "file_name": "ventes.csv", "collection_name": "Ventes"}],
+        "steps": [{"tool": "search", "arguments": {"query": "prix"}, "output": '{"columns": []}'}],
+    }
+
+    done = await client.post(
+        f"/api/internal/runs/{run['id']}/complete", json={"content": "42", "trace": trace}, headers=worker
+    )
+
+    assert done.status_code == 200
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
+    assert messages[0]["trace"] is None  # the user's message has none
+    assert messages[1]["trace"] == trace
+
+
+async def test_a_trace_that_is_too_large_is_refused(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+    await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)
+    steps = [{"tool": "search", "arguments": {}, "output": "x"}] * 51
+
+    refused = await client.post(
+        f"/api/internal/runs/{run['id']}/complete", json={"content": "a", "trace": {"steps": steps}}, headers=worker
+    )
+
+    assert refused.status_code == 422
 
 
 async def test_cancel_run_route_and_worker_conflict(client, monkeypatch) -> None:
