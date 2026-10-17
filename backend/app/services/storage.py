@@ -15,8 +15,31 @@ def sanitize_file_name(name: str) -> str:
     return PurePosixPath(name.replace("\\", "/")).name or "file"
 
 
+def key_prefix() -> str:
+    """The project level that starts every key (S3_KEY_PREFIX, without slashes; empty = no prefix)."""
+    return S3Settings().S3_KEY_PREFIX.strip("/")
+
+
+def _join(*parts: object) -> str:
+    return "/".join(str(part) for part in parts if part not in ("", None))
+
+
+def collection_prefix(collection_id: uuid.UUID) -> str:
+    """Everything stored for a collection: its files, their analyses and its search index."""
+    return _join(key_prefix(), collection_id) + "/"
+
+
+def legacy_collection_prefix(collection_id: uuid.UUID) -> str:
+    """Where the objects of collections created before the project level existed live."""
+    return f"{collection_id}/"
+
+
+def file_base(collection_id: uuid.UUID, file_id: uuid.UUID) -> str:
+    return _join(key_prefix(), collection_id, file_id)
+
+
 def version_prefix(collection_id: uuid.UUID, file_id: uuid.UUID, version: int) -> str:
-    return f"{collection_id}/{file_id}/versions/{version}"
+    return f"{file_base(collection_id, file_id)}/versions/{version}"
 
 
 def file_key(collection_id: uuid.UUID, file_id: uuid.UUID, version: int, file_name: str) -> str:
@@ -25,6 +48,18 @@ def file_key(collection_id: uuid.UUID, file_id: uuid.UUID, version: int, file_na
 
 def analysis_key(collection_id: uuid.UUID, file_id: uuid.UUID, version: int) -> str:
     return f"{version_prefix(collection_id, file_id, version)}/analyse.json"
+
+
+def base_of(file_s3_key: str) -> str:
+    """The directory of a file (`.../<file_id>`) read back from a key we stored, so a file keeps the layout it
+    was created with: objects written before the project level existed stay reachable, and new versions of such
+    a file stay next to their older ones."""
+    return file_s3_key.rsplit("/versions/", 1)[0]
+
+
+def version_key(file_s3_key: str, version: int, leaf: str) -> str:
+    """The key of `leaf` (file name or analyse.json) for a given version of a file, given its stored key."""
+    return f"{base_of(file_s3_key)}/versions/{version}/{leaf}"
 
 
 class StorageService:

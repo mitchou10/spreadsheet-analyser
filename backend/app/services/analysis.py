@@ -11,7 +11,7 @@ from app.services.actor import Actor
 from app.services.dispatcher import RunDispatcher
 from app.services.errors import ConflictError, NotFoundError
 from app.services.file import FileService
-from app.services.storage import StorageService, analysis_key, file_key
+from app.services.storage import StorageService, sanitize_file_name, version_key
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +140,8 @@ class AnalysisService:
             file_version=analysis.file_version,
             content_type=file.content_type,
             size_bytes=file.size_bytes,
-            source_key=file_key(file.collection_id, file.id, analysis.file_version, file.name),
-            result_key=analysis_key(file.collection_id, file.id, analysis.file_version),
+            source_key=version_key(file.s3_key, analysis.file_version, sanitize_file_name(file.name)),
+            result_key=version_key(file.s3_key, analysis.file_version, "analyse.json"),
         )
 
     async def ready_for_collection(self, collection_id: uuid.UUID) -> list[IndexableFile]:

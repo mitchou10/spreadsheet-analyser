@@ -27,9 +27,9 @@ async def test_worker_lifecycle_pending_processing_ready(session, storage, file)
     service = AnalysisService(session, storage)
     analysis = await service.create(ALICE, file.id)
     context = await service.context(analysis.id)
-    expected_key = f"{file.collection_id}/{file.id}/versions/1/analyse.json"
+    expected_key = f"spreadsheet-analyser/{file.collection_id}/{file.id}/versions/1/analyse.json"
     assert context.result_key == expected_key
-    assert context.source_key == f"{file.collection_id}/{file.id}/versions/1/a.csv"
+    assert context.source_key == f"spreadsheet-analyser/{file.collection_id}/{file.id}/versions/1/a.csv"
     assert (context.file_name, context.size_bytes) == ("a.csv", 2)
 
     assert (await service.start(analysis.id)).status == AnalysisStatus.PROCESSING
@@ -205,3 +205,22 @@ async def test_an_unreachable_queue_does_not_stop_an_analysis_from_becoming_read
     ready = await AnalysisService(session, storage, dispatcher).complete(analysis.id, context.result_key)
 
     assert ready.status == AnalysisStatus.READY
+
+
+async def test_the_analysis_of_a_file_written_before_the_project_level_uses_its_original_keys(
+    session, storage, file
+) -> None:
+    legacy_key = file.s3_key.removeprefix("spreadsheet-analyser/")
+    storage.objects[legacy_key] = storage.objects.pop(file.s3_key)
+    file.s3_key = legacy_key
+    await session.commit()
+    service = AnalysisService(session, storage)
+    analysis = await service.create(ALICE, file.id)
+    await service.start(analysis.id)
+
+    context = await service.context(analysis.id)
+
+    assert context.source_key == legacy_key
+    assert context.result_key == f"{file.collection_id}/{file.id}/versions/1/analyse.json"
+    await storage.put_json(context.result_key, {"sheets": []})
+    assert (await service.complete(analysis.id, context.result_key)).status == AnalysisStatus.READY

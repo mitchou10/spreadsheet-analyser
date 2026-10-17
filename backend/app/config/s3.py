@@ -9,6 +9,9 @@ class S3Settings(BaseSettings):
     # Leave unset for real AWS S3; set to the RustFS URL (e.g. http://rustfs:9000) otherwise.
     AWS_ENDPOINT_URL_S3: str | None = "http://localhost:9000"
     AWS_S3_BUCKET: str = "spreadsheet-analyser"
+    # First level of every object key (`<prefix>/<collection_id>/...`), so that one bucket can host several projects.
+    # The workers that read or write the search indexes must use the same value (`S3_KEY_PREFIX`).
+    S3_KEY_PREFIX: str = "spreadsheet-analyser"
 
     # Per-file cap enforced by the upload route (the whole file is buffered in memory).
     MAX_UPLOAD_BYTES: int = 50 * 1024 * 1024

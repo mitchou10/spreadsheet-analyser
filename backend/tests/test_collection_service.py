@@ -55,3 +55,18 @@ async def test_delete_by_non_owner_is_refused(session, storage) -> None:
     with pytest.raises(NotFoundError):
         await service.delete(BOB, collection.id)
     assert await session.get(Collection, collection.id) is not None
+
+
+async def test_deleting_a_collection_removes_the_objects_of_both_layouts(session, storage) -> None:
+    collections = CollectionService(session, storage)
+    collection = await collections.create(ALICE, "Sales")
+    await FileService(session, storage).upload(ALICE, collection.id, "new.csv", b"1")
+    # objects written before the project level existed, plus an index from either layout, and another collection's
+    storage.objects[f"{collection.id}/old-file/versions/1/old.csv"] = b"2"
+    storage.objects[f"{collection.id}/search-index.json.gz"] = b"3"
+    storage.objects[f"spreadsheet-analyser/{collection.id}/search-index.json.gz"] = b"4"
+    storage.objects["spreadsheet-analyser/someone-else/file/versions/1/x.csv"] = b"5"
+
+    await collections.delete(ALICE, collection.id)
+
+    assert list(storage.objects) == ["spreadsheet-analyser/someone-else/file/versions/1/x.csv"]

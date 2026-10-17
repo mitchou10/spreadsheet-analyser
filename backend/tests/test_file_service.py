@@ -16,7 +16,7 @@ async def test_first_upload_creates_version_1_with_s3_key(session, storage, coll
     file = await FileService(session, storage).upload(ALICE, collection.id, "sales.xlsx", b"abc", "text/csv")
 
     assert file.version == 1
-    assert file.s3_key == f"{collection.id}/{file.id}/versions/1/sales.xlsx"
+    assert file.s3_key == f"spreadsheet-analyser/{collection.id}/{file.id}/versions/1/sales.xlsx"
     assert file.file_hash == hashlib.sha256(b"abc").hexdigest()
     assert file.size_bytes == 3
     assert storage.objects[file.s3_key] == b"abc"
@@ -42,7 +42,7 @@ async def test_new_content_same_name_bumps_version_and_keeps_old_object(session,
 
     assert second.id == first.id
     assert second.version == 2
-    assert second.s3_key == f"{collection.id}/{first.id}/versions/2/a.csv"
+    assert second.s3_key == f"spreadsheet-analyser/{collection.id}/{first.id}/versions/2/a.csv"
     assert storage.objects[old_key] == b"v1"
     assert storage.objects[second.s3_key] == b"v2"
 
@@ -104,3 +104,51 @@ async def test_delete_removes_every_version_from_s3(session, storage, collection
     assert storage.objects == {}
     with pytest.raises(NotFoundError):
         await service.get(ALICE, file.id)
+
+
+async def _make_legacy(session, storage, file):
+    """Turn a file into one written before the project level existed: same objects, key without the prefix."""
+    legacy_key = file.s3_key.removeprefix("spreadsheet-analyser/")
+    storage.objects[legacy_key] = storage.objects.pop(file.s3_key)
+    file.s3_key = legacy_key
+    await session.commit()
+    return legacy_key
+
+
+async def test_a_new_version_of_a_file_written_before_the_project_level_stays_in_its_layout(
+    session, storage, collection
+) -> None:
+    service = FileService(session, storage)
+    file = await service.upload(ALICE, collection.id, "a.csv", b"v1")
+    await _make_legacy(session, storage, file)
+
+    second = await service.upload(ALICE, collection.id, "a.csv", b"v2")
+
+    assert second.s3_key == f"{collection.id}/{file.id}/versions/2/a.csv"  # next to v1, not under the prefix
+    assert set(storage.objects) == {f"{collection.id}/{file.id}/versions/1/a.csv", second.s3_key}
+
+
+async def test_deleting_a_file_written_before_the_project_level_removes_its_objects(
+    session, storage, collection
+) -> None:
+    service = FileService(session, storage)
+    file = await service.upload(ALICE, collection.id, "a.csv", b"v1")
+    await _make_legacy(session, storage, file)
+    storage.objects[f"{collection.id}/{file.id}/versions/1/analyse.json"] = {"sheets": []}
+
+    await service.delete(ALICE, file.id)
+
+    assert storage.objects == {}
+
+
+async def test_new_files_live_under_the_project_level_and_deleting_one_leaves_the_others(
+    session, storage, collection
+) -> None:
+    service = FileService(session, storage)
+    first = await service.upload(ALICE, collection.id, "a.csv", b"1")
+    second = await service.upload(ALICE, collection.id, "b.csv", b"2")
+    assert all(key.startswith("spreadsheet-analyser/") for key in storage.objects)
+
+    await service.delete(ALICE, first.id)
+
+    assert list(storage.objects) == [second.s3_key]
