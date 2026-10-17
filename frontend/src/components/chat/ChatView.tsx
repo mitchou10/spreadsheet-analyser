@@ -21,6 +21,7 @@ interface ChatViewProps {
   collections: CollectionSummary[]
   onSend: (content: string, scope: MessageScope) => void
   onCancel: () => void
+  onCollectionsChanged: () => void
 }
 
 export function ChatView({
@@ -39,6 +40,7 @@ export function ChatView({
   collections,
   onSend,
   onCancel,
+  onCollectionsChanged,
 }: ChatViewProps) {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
@@ -66,6 +68,7 @@ export function ChatView({
         collections={collections}
         onSend={onSend}
         onCancel={onCancel}
+        onCollectionsChanged={onCollectionsChanged}
       />
     </div>
   )
