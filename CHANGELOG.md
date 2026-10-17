@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.0-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.3.0...v0.4.0-rc) (2026-10-17)
+
+
+### Features
+
+* **agent-worker:** search the saved BM25 index of each collection, indexing the rest in memory ([97216b3](https://github.com/mitchou10/spreadsheet-analyser/commit/97216b3356d39a51b9cfa4adfdfab5fad8d1bf5c))
+* **agent-worker:** search the saved index of the user when a scope spans several collections ([05ef913](https://github.com/mitchou10/spreadsheet-analyser/commit/05ef913851c5b188ec53691a75d2e831469fea81))
+* **analysis-worker:** keep the search index of each collection up to date in S3 ([8693c48](https://github.com/mitchou10/spreadsheet-analyser/commit/8693c48059dc35ede97b5be3396177890237076f))
+* **backend:** drive the index worker and tell it who can read what ([80aff20](https://github.com/mitchou10/spreadsheet-analyser/commit/80aff202e489cdbc830b68b031fc74dc99dc0d87))
+* **backend:** feed and trigger the search index (context, ready analyses, forget, rebuild) ([1faf5a9](https://github.com/mitchou10/spreadsheet-analyser/commit/1faf5a9f74a3f07b21b4494a22e5ce1b3d6db613))
+* **chart:** deploy the index worker ([cf66f79](https://github.com/mitchou10/spreadsheet-analyser/commit/cf66f79ca5834b05188c4b1553ecd89007032cdd))
+* **index-worker:** add a worker that keeps the collection and user search indexes up to date ([9b39e44](https://github.com/mitchou10/spreadsheet-analyser/commit/9b39e44f4e2cddf05496ee9b79a2c1c25e9f3dd7))
+
+
+### Bug Fixes
+
+* use a single dollar in the worker image healthchecks ([1f0ea78](https://github.com/mitchou10/spreadsheet-analyser/commit/1f0ea786ef9c9a5d9e22d8b834f1dba489896c29))
+
+
+### Code Refactoring
+
+* **analysis-worker:** leave the search indexes to the index worker ([17cccf7](https://github.com/mitchou10/spreadsheet-analyser/commit/17cccf75e00a4134f8b7de180f3ae18202552434))
+
 ## [0.3.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.2.0...v0.3.0) (2026-10-17)
 
 
