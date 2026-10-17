@@ -35,5 +35,6 @@ class File(Base):
     uploaded_by: Mapped[str] = mapped_column(String(255))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    collection: Mapped["Collection"] = relationship(back_populates="files")
+    # Joined: a message lists its files with the collection they come from, and lazy loading is not allowed in async.
+    collection: Mapped["Collection"] = relationship(back_populates="files", lazy="joined")
     analyses: Mapped[list["Analysis"]] = relationship(back_populates="file", cascade="all, delete-orphan")

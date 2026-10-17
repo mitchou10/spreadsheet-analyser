@@ -75,6 +75,18 @@ class ConversationService:
         await self.get(actor, conversation_id)
         return await self.messages.list_by_conversation(conversation_id)
 
+    async def page_messages(
+        self, actor: Actor, conversation_id: uuid.UUID, limit: int, before_id: uuid.UUID | None = None
+    ) -> tuple[list[Message], bool]:
+        """A page of the conversation, newest first from `before_id` back, returned oldest first."""
+        await self.get(actor, conversation_id)
+        before = None
+        if before_id is not None:
+            before = await self.messages.get(before_id)
+            if before is None or before.conversation_id != conversation_id:
+                raise NotFoundError(f"Message {before_id} not found")
+        return await self.messages.page_by_conversation(conversation_id, limit, before)
+
     async def history(self, conversation_id: uuid.UUID) -> list[Message]:
         """All messages of a conversation, for trusted callers (the worker) - no ownership check."""
         if await self.conversations.get(conversation_id) is None:
@@ -116,6 +128,7 @@ class ConversationService:
         tool_call_id: str | None = None,
         collections: list[Collection] | None = None,
         files: list[File] | None = None,
+        trace: dict | None = None,
     ) -> Message:
         """Adds the message to the open transaction without committing, so callers can make it atomic
         with other writes (e.g. the run it triggers). No access check: callers already did theirs."""
@@ -128,6 +141,7 @@ class ConversationService:
                 tool_call_id=tool_call_id,
                 collections=collections or [],
                 files=files or [],
+                trace=trace,
             )
         )
         # The first user message names the conversation, like in any chat UI.

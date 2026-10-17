@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, DateTime, ForeignKey, String, Table, Text, func
@@ -50,9 +50,15 @@ class Message(Base):
     content: Mapped[str | None] = mapped_column(Text, default=None)
     # Tool calls requested by the assistant, e.g. [{"id": ..., "name": ..., "arguments": {...}}].
     tool_calls: Mapped[list[dict] | None] = mapped_column(JSONB, default=None)
+    # How an assistant answer was produced: {"plan", "files", "steps": [{"tool", "arguments", "output"}]}.
+    trace: Mapped[dict | None] = mapped_column(JSONB, default=None)
     # Set on role=TOOL messages: which tool_calls[].id this message answers.
     tool_call_id: Mapped[str | None] = mapped_column(String(255), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set by the application (microsecond resolution) rather than by SQL now(), which is
+    # the same for every row of a transaction: messages are ordered, and paged, by this.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=lambda: datetime.now(UTC)
+    )
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
     # Optional per-message scope: the user can aim one question at several collections and/or specific files.

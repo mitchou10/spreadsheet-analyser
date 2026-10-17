@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 
 from app.dependencies import ActorDep, ConversationServiceDep, ModelCatalogDep, RunServiceDep
 from app.models import Message
@@ -10,6 +11,9 @@ from app.schemas import (
     ConversationUpdate,
     MessageCreate,
     MessageOut,
+    MessagePage,
+    MessageSourceCollection,
+    MessageSourceFile,
     RunOut,
     SendMessageOut,
 )
@@ -28,6 +32,12 @@ def _message_out(message: Message) -> MessageOut:
         tool_call_id=message.tool_call_id,
         collection_ids=[collection.id for collection in message.collections],
         file_ids=[file.id for file in message.files],
+        collections=[MessageSourceCollection(id=c.id, name=c.name) for c in message.collections],
+        files=[
+            MessageSourceFile(id=f.id, name=f.name, collection_id=f.collection_id, collection_name=f.collection.name)
+            for f in message.files
+        ],
+        trace=message.trace,
         created_at=message.created_at,
     )
 
@@ -74,11 +84,17 @@ async def delete_conversation(conversation_id: uuid.UUID, actor: ActorDep, servi
     await service.delete(actor, conversation_id)
 
 
-@router.get("/{conversation_id}/messages", summary="Messages of a conversation, oldest first")
+@router.get("/{conversation_id}/messages", summary="A page of messages, oldest first within the page")
 async def list_messages(
-    conversation_id: uuid.UUID, actor: ActorDep, service: ConversationServiceDep
-) -> list[MessageOut]:
-    return [_message_out(m) for m in await service.list_messages(actor, conversation_id)]
+    conversation_id: uuid.UUID,
+    actor: ActorDep,
+    service: ConversationServiceDep,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+    before: Annotated[uuid.UUID | None, Query(description="Id of the oldest message already loaded")] = None,
+) -> MessagePage:
+    """Without `before`: the latest `limit` messages. With it: the `limit` messages just before that one."""
+    messages, has_more = await service.page_messages(actor, conversation_id, limit, before)
+    return MessagePage(items=[_message_out(m) for m in messages], has_more=has_more)
 
 
 @router.post(
