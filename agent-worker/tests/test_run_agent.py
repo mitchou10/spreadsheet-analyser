@@ -124,8 +124,10 @@ def make_client(
     account=None,
     account_status=200,
     query_replies=None,
+    chart_replies=None,
 ):
     replies = iter(query_replies or [])
+    chart_answers = iter(chart_replies or [])
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append((request.method, request.url.path, request.read().decode(), request.headers["authorization"]))
@@ -137,6 +139,10 @@ def make_client(
                 200,
                 json={"run_id": "r1", "conversation_id": "c1", "model": "gpt-x", "requester_email": "marie@example.fr"},
             )
+        if path.endswith("/runs/r1/charts"):
+            return httpx.Response(202, json={"id": "ch1", "status": "queued", "title": "t", "url": "", "markdown": ""})
+        if path.endswith("/charts/ch1"):
+            return httpx.Response(200, json=next(chart_answers))
         if path.endswith("/runs/r1/queries"):
             return httpx.Response(202, json={"id": "q1", "status": "queued", "result": None, "error": None})
         if path.endswith("/queries/q1"):
@@ -214,6 +220,7 @@ def test_agent_plans_first_then_answers_the_last_message_with_history() -> None:
         "account_overview",
         "account_files",
         "query_data",
+        "create_chart",
     }
 
 

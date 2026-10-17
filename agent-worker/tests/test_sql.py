@@ -99,7 +99,7 @@ def test_it_polls_until_the_query_is_finished_and_gives_the_rows() -> None:
 
     result = runner(client).run('SELECT * FROM f1."Ventes"')
 
-    assert result == {"columns": ["a", "b"], "rows": [[1, "x"], [2, "y"]], "row_count": 2}
+    assert result == {"query_id": "q1", "columns": ["a", "b"], "rows": [[1, "x"], [2, "y"]], "row_count": 2}
     assert client.polls == []
 
 
@@ -189,6 +189,7 @@ def test_the_agent_answers_from_a_query_it_ran(monkeypatch) -> None:
     assert run(make_client(calls, query_replies=[completed]), llm) == "completed"
 
     assert json.loads(tool_outputs(llm)[0]) == {
+        "query_id": "q1",
         "columns": ["region", "total"],
         "rows": [["Nord", 40.5]],
         "row_count": 1,

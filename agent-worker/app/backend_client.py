@@ -103,6 +103,13 @@ class BackendClient:
     def get_query(self, query_id: str) -> dict:
         return self._request("GET", f"/queries/{query_id}")
 
+    def create_chart(self, run_id: str, query_id: str, spec: dict) -> dict:
+        """Asks for a chart of the result of a query of this run. Returns the queued chart: poll get_chart."""
+        return self._request("POST", f"/runs/{run_id}/charts", {"query_id": query_id, "spec": spec})
+
+    def get_chart(self, chart_id: str) -> dict:
+        return self._request("GET", f"/charts/{chart_id}")
+
     def run_files(self, run_id: str) -> list[dict]:
         """Files the run's agent may look at, each with its latest analysis state and the S3 key of
         analyse.json once ready: [{file_id, file_name, collection_name, version, analysis_status, result_key...}]"""
