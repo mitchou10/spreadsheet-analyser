@@ -10,6 +10,7 @@ from app.config import KeycloakSettings
 from app.dependencies import get_storage
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
+from app.routers.charts import internal_router as charts_internal_router
 from app.routers.collections import collections_router, files_router
 from app.routers.conversations import router as conversations_router
 from app.routers.health import router as health_router
@@ -71,6 +72,7 @@ app.include_router(models_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
 app.include_router(queries_internal_router, prefix="/api")
+app.include_router(charts_internal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 
 

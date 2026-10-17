@@ -42,6 +42,7 @@ class FakeDispatcher:
         self.enqueued: list[uuid.UUID] = []
         self.analyses: list[uuid.UUID] = []
         self.queries: list[uuid.UUID] = []
+        self.charts: list[uuid.UUID] = []
         self.indexed: list[uuid.UUID] = []
         self.user_rebuilds: list[str] = []
         self.forgotten: list[tuple[uuid.UUID, uuid.UUID]] = []
@@ -66,6 +67,12 @@ class FakeDispatcher:
             raise ConnectionError("broker down")
         self.queries.append(query_id)
         return f"query-task-{query_id}"
+
+    async def enqueue_chart(self, chart_id: uuid.UUID) -> str:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.charts.append(chart_id)
+        return f"chart-task-{chart_id}"
 
     async def enqueue_index_file(self, analysis_id: uuid.UUID) -> str:
         if self.fail:

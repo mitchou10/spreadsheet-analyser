@@ -46,6 +46,16 @@ def file_key(collection_id: uuid.UUID, file_id: uuid.UUID, version: int, file_na
     return f"{version_prefix(collection_id, file_id, version)}/{sanitize_file_name(file_name)}"
 
 
+def conversation_prefix(conversation_id: uuid.UUID) -> str:
+    """Everything stored for a conversation (today: the charts of its answers)."""
+    return _join(key_prefix(), "conversations", conversation_id) + "/"
+
+
+def chart_key(conversation_id: uuid.UUID, message_id: uuid.UUID, chart_id: uuid.UUID) -> str:
+    """A chart of an answer: by conversation, then by the message that shows it."""
+    return f"{conversation_prefix(conversation_id)}{message_id}/{chart_id}.png"
+
+
 def analysis_key(collection_id: uuid.UUID, file_id: uuid.UUID, version: int) -> str:
     return f"{version_prefix(collection_id, file_id, version)}/analyse.json"
 

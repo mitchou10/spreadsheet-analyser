@@ -12,6 +12,7 @@ from app.services import (
     Actor,
     AdminService,
     AnalysisService,
+    ChartService,
     CollectionService,
     ConversationService,
     FileService,
@@ -63,8 +64,8 @@ def get_analysis_service(
     return AnalysisService(session, storage, dispatcher)
 
 
-def get_conversation_service(session: SessionDep) -> ConversationService:
-    return ConversationService(session)
+def get_conversation_service(session: SessionDep, storage: StorageDep) -> ConversationService:
+    return ConversationService(session, storage)
 
 
 CollectionServiceDep = Annotated[CollectionService, Depends(get_collection_service)]
@@ -132,3 +133,12 @@ def get_sql_query_service(
 
 
 SqlQueryServiceDep = Annotated[SqlQueryService, Depends(get_sql_query_service)]
+
+
+def get_chart_service(
+    session: SessionDep, storage: StorageDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> ChartService:
+    return ChartService(session, dispatcher, storage)
+
+
+ChartServiceDep = Annotated[ChartService, Depends(get_chart_service)]

@@ -767,3 +767,100 @@ async def test_a_sql_result_over_the_ceiling_is_refused(client, storage, monkeyp
     huge = {"columns": [{"name": "n", "type": "BIGINT"}], "rows": [[i] for i in range(501)], "truncated": False}
 
     assert (await client.post(f"{base}/complete", json=huge, headers=worker)).status_code == 422
+
+
+async def _run_with_a_successful_query(client, storage):
+    """A running run whose query (over its one analysed file) succeeded; returns (run id, query id)."""
+    worker = {"Authorization": "Bearer secret"}
+    run_id, file_id = await _running_run_with_a_ready_file(client, storage)
+    body = {"sql": 'SELECT 1 AS "n"', "files": [{"ref": "f1", "file_id": file_id}]}
+    query = (await client.post(f"/api/internal/runs/{run_id}/queries", json=body, headers=worker)).json()
+    base = f"/api/internal/queries/{query['id']}"
+    await client.post(f"{base}/start", headers=worker)
+    result = {"columns": [{"name": "n", "type": "BIGINT"}], "rows": [[1]], "truncated": False}
+    await client.post(f"{base}/complete", json=result, headers=worker)
+    return run_id, query["id"]
+
+
+CHART_SPEC = {"type": "bar", "x": "région", "y": ["total"], "title": "Total par région"}
+
+
+async def test_a_chart_goes_from_the_agent_to_the_worker_to_the_owner_behind_the_backend(
+    client, storage, dispatcher, monkeypatch
+) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, query_id = await _run_with_a_successful_query(client, storage)
+    url = f"/api/internal/runs/{run_id}/charts"
+
+    assert (await client.post(url, json={"query_id": query_id, "spec": CHART_SPEC})).status_code == 401
+    created = await client.post(url, json={"query_id": query_id, "spec": CHART_SPEC}, headers=worker)
+    assert created.status_code == 202
+    chart = created.json()
+    assert chart["status"] == "queued" and dispatcher.charts == [uuid.UUID(chart["id"])]
+    image_url = chart["url"]
+    assert chart["markdown"] == f"![Total par région]({image_url})"
+    assert image_url.startswith("/api/conversations/") and image_url.endswith(f"/charts/{chart['id']}")
+
+    base = f"/api/internal/charts/{chart['id']}"
+    context = (await client.get(f"{base}/context", headers=worker)).json()
+    assert context["sql"] == 'SELECT 1 AS "n"' and context["spec"]["type"] == "bar"
+    assert context["s3_key"].endswith(f"/{chart['id']}.png") and "/conversations/" in context["s3_key"]
+    await client.post(f"{base}/start", headers=worker)
+    storage.objects[context["s3_key"]] = b"\x89PNG-bytes"
+    done = await client.post(
+        f"{base}/complete", json={"s3_key": context["s3_key"], "width": 900, "height": 540}, headers=worker
+    )
+    assert done.json()["status"] == "completed" and done.json()["width"] == 900
+
+    image = await client.get(image_url)
+    assert image.status_code == 200 and image.content == b"\x89PNG-bytes"
+    assert image.headers["content-type"] == "image/png" and image.headers["x-content-type-options"] == "nosniff"
+    assert "private" in image.headers["cache-control"]
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.get(image_url)).status_code == 404  # not Bob's conversation
+    prefix, _, rest = image_url.partition("/messages/")
+    tail = rest.partition("/charts/")[2]
+    del app.dependency_overrides[get_actor]
+    other_message = f"{prefix}/messages/{uuid.uuid4()}/charts/{tail}"
+    assert (await client.get(other_message)).status_code == 404  # the owner, but not that message
+
+
+async def test_a_chart_request_is_validated_and_refused_when_it_cannot_be_drawn(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, query_id = await _run_with_a_successful_query(client, storage)
+    url = f"/api/internal/runs/{run_id}/charts"
+
+    bad_spec = {"type": "pie", "x": "a", "y": ["b", "c"], "title": "t"}
+    assert (await client.post(url, json={"query_id": query_id, "spec": bad_spec}, headers=worker)).status_code == 422
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert (await client.post(url, json={"query_id": unknown, "spec": CHART_SPEC}, headers=worker)).status_code == 404
+    assert (await client.get(f"/api/internal/charts/{unknown}", headers=worker)).status_code == 404
+
+
+async def test_a_failed_chart_is_polled_with_its_error_and_the_columns(client, storage, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    run_id, query_id = await _run_with_a_successful_query(client, storage)
+    chart = (
+        await client.post(
+            f"/api/internal/runs/{run_id}/charts", json={"query_id": query_id, "spec": CHART_SPEC}, headers=worker
+        )
+    ).json()
+    base = f"/api/internal/charts/{chart['id']}"
+    await client.post(f"{base}/start", headers=worker)
+    columns = [{"name": "n", "type": "BIGINT"}]
+
+    await client.post(
+        f"{base}/fail", json={"error": "Colonne 'région' introuvable", "columns": columns}, headers=worker
+    )
+
+    polled = (await client.get(base, headers=worker)).json()
+    assert (polled["status"], polled["error"], polled["available_columns"]) == (
+        "failed",
+        "Colonne 'région' introuvable",
+        columns,
+    )
+    assert (await client.get(chart["url"])).status_code == 404  # nothing was drawn
