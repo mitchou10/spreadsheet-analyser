@@ -39,19 +39,21 @@ def get_storage() -> StorageService:
 StorageDep = Annotated[StorageService, Depends(get_storage)]
 
 
-def get_collection_service(session: SessionDep, storage: StorageDep) -> CollectionService:
-    return CollectionService(session, storage)
-
-
-def get_file_service(session: SessionDep, storage: StorageDep) -> FileService:
-    return FileService(session, storage)
-
-
 _dispatcher = CeleryRunDispatcher()
 
 
 def get_dispatcher() -> RunDispatcher:
     return _dispatcher
+
+
+def get_collection_service(
+    session: SessionDep, storage: StorageDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> CollectionService:
+    return CollectionService(session, storage, dispatcher)
+
+
+def get_file_service(session: SessionDep, storage: StorageDep) -> FileService:
+    return FileService(session, storage)
 
 
 def get_analysis_service(
@@ -113,8 +115,10 @@ def get_admin(user: Annotated[RequestContext, Depends(get_current_user)]) -> Act
 AdminDep = Annotated[Actor, Depends(get_admin)]
 
 
-def get_admin_service(session: SessionDep) -> AdminService:
-    return AdminService(session)
+def get_admin_service(
+    session: SessionDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> AdminService:
+    return AdminService(session, dispatcher)
 
 
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]

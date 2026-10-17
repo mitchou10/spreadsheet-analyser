@@ -4,7 +4,7 @@ from dataclasses import asdict
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies import AdminDep, AdminServiceDep, AnalysisServiceDep, get_admin
-from app.schemas import AccessCreate, AccessOut, AdminCollectionOut, AdminPersonOut
+from app.schemas import AccessCreate, AccessOut, AdminCollectionOut, AdminPersonOut, UserIndexRebuildIn
 
 # Every route here requires the administrator role, whatever the route's own parameters.
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_admin)])
@@ -55,3 +55,16 @@ async def rebuild_search_index(
         await analyses.request_index_rebuild(collection_id)
     except Exception as error:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The analysis worker is unreachable") from error
+
+
+@router.post(
+    "/users/search-index",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Rebuild the saved search index of everything a person can read (by email)",
+)
+async def rebuild_user_search_index(body: UserIndexRebuildIn, service: AdminServiceDep) -> None:
+    """Kept up to date as files and access change; this is for the first build and for repairs."""
+    try:
+        await service.request_user_index_rebuild(body.email)
+    except Exception as error:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "The index worker is unreachable") from error

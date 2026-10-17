@@ -157,6 +157,16 @@ class AnalysisService:
             if (analysis := latest.get(file.id)) and analysis.status == AnalysisStatus.READY and analysis.s3_key
         ]
 
+    async def _index_file(self, analysis_id: uuid.UUID) -> None:
+        """The analysis is ready: the index worker adds its file to the collection's search index. Best effort:
+        the analysis is valid either way, and the agent indexes in memory what the saved index lacks."""
+        if self.dispatcher is None:
+            return
+        try:
+            await self.dispatcher.enqueue_index_file(analysis_id)
+        except Exception:
+            logger.exception("Could not enqueue the indexing of analysis %s", analysis_id)
+
     async def forget_file(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> None:
         """A file was deleted: have it removed from its collection's search index. Best effort, because a
         stale entry is harmless (the agent only searches files that still exist) and the file is already gone."""
@@ -190,7 +200,9 @@ class AnalysisService:
             raise ConflictError(f"Unexpected result key {s3_key!r}")
         analysis.s3_key = s3_key
         analysis.error = None
-        return await self._set_status(analysis_id, AnalysisStatus.READY, keep_error=True)
+        ready = await self._set_status(analysis_id, AnalysisStatus.READY, keep_error=True)
+        await self._index_file(analysis_id)
+        return ready
 
     async def fail(self, analysis_id: uuid.UUID, error: str) -> Analysis:
         analysis = await self._require(analysis_id)

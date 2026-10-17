@@ -1,3 +1,4 @@
+import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -7,7 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import AccessCollection, Collection
 from app.repositories import AccessCollectionRepository, CollectionRepository, FileRepository
 from app.services.actor import Actor, normalize_email
+from app.services.dispatcher import RunDispatcher
 from app.services.errors import ConflictError, NotFoundError
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -48,8 +52,9 @@ class AdminService:
 
     Callers must already have checked the caller is an administrator: nothing here is scoped to a user."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, dispatcher: RunDispatcher | None = None) -> None:
         self.session = session
+        self.dispatcher = dispatcher  # None (tests, scripts): nothing is sent to the index worker
         self.collections = CollectionRepository(session)
         self.accesses = AccessCollectionRepository(session)
         self.files = FileRepository(session)
@@ -110,6 +115,7 @@ class AdminService:
             AccessCollection(collection_id=collection.id, email=email, granted_by=admin.user_id)
         )
         await self.session.commit()
+        await self._user_index_changed(email)  # the person can now search this collection
         return access
 
     async def revoke(self, collection_id: uuid.UUID, email: str) -> None:
@@ -119,6 +125,24 @@ class AdminService:
             raise NotFoundError(f"No access for {email} on collection {collection_id}")
         await self.accesses.delete(access)
         await self.session.commit()
+        await self._user_index_changed(normalize_email(email))  # ... and can no longer search it
+
+    async def request_user_index_rebuild(self, email: str) -> None:
+        """Rebuilds the search index of everything a person can read (backfill, repair). Raises if not queued."""
+        email = normalize_email(email)
+        if not email:
+            raise ValueError("email is required")
+        if self.dispatcher is None:
+            raise RuntimeError("No dispatcher configured")
+        await self.dispatcher.enqueue_user_index_rebuild(email)
+
+    async def _user_index_changed(self, email: str) -> None:
+        if self.dispatcher is None:
+            return
+        try:
+            await self.dispatcher.enqueue_user_index_rebuild(email)
+        except Exception:
+            logger.exception("Could not enqueue the rebuild of a user's search index")
 
     async def get_collection(self, collection_id: uuid.UUID) -> Collection:
         return await self._collection(collection_id)

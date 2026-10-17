@@ -130,6 +130,7 @@ class RunContextOut(BaseModel):
     run_id: uuid.UUID
     conversation_id: uuid.UUID
     user_id: str
+    requester_email: str | None
     model: str | None
     messages: list[dict]
     collection_ids: list[uuid.UUID]
@@ -250,3 +251,26 @@ class CollectionAnalysisOut(BaseModel):
     version: int
     # S3 key of the file's analyse.json (its latest analysis, ready).
     result_key: str
+
+
+class CollectionAudienceOut(BaseModel):
+    collection_id: uuid.UUID
+    # null for collections created before owner emails were recorded (until their owner next uses the app)
+    owner_email: str | None
+    emails: list[str]  # the people it is shared with
+
+
+class UserCollectionsOut(BaseModel):
+    collection_ids: list[uuid.UUID]
+
+
+class UserIndexRebuildIn(BaseModel):
+    email: str = Field(max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def _looks_like_an_email(cls, value: str) -> str:
+        value = value.strip()
+        if "@" not in value[1:-1]:
+            raise ValueError("invalid email")
+        return value

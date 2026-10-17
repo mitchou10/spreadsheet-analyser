@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from app.dependencies import (
     ActorDep,
     AnalysisServiceDep,
+    CollectionServiceDep,
     ConversationServiceDep,
     RunServiceDep,
     require_internal_token,
@@ -16,12 +17,14 @@ from app.schemas import (
     AnalysisFailIn,
     AnalysisOut,
     CollectionAnalysisOut,
+    CollectionAudienceOut,
     InternalMessageOut,
     RunCompleteIn,
     RunContextOut,
     RunFailIn,
     RunOut,
     ScopeFileOut,
+    UserCollectionsOut,
 )
 
 router = APIRouter(prefix="/runs", tags=["Runs"])
@@ -116,3 +119,14 @@ async def fail_analysis(analysis_id: uuid.UUID, body: AnalysisFailIn, service: A
 )
 async def collection_analyses(collection_id: uuid.UUID, service: AnalysisServiceDep) -> list[CollectionAnalysisOut]:
     return [CollectionAnalysisOut(**asdict(item)) for item in await service.ready_for_collection(collection_id)]
+
+
+@internal_router.get("/collections/{collection_id}/audience", summary="Who can read a collection (owner and shares)")
+async def collection_audience(collection_id: uuid.UUID, service: CollectionServiceDep) -> CollectionAudienceOut:
+    owner_email, emails = await service.audience(collection_id)
+    return CollectionAudienceOut(collection_id=collection_id, owner_email=owner_email, emails=emails)
+
+
+@internal_router.get("/users/collections", summary="Collections a person can read, by email (user index input)")
+async def user_collections(email: str, service: CollectionServiceDep) -> UserCollectionsOut:
+    return UserCollectionsOut(collection_ids=await service.readable_collection_ids(email))

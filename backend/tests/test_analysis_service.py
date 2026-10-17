@@ -177,3 +177,31 @@ async def test_an_unreachable_queue_never_blocks_a_file_deletion_but_fails_a_reb
     await service.forget_file(file.collection_id, file.id)  # best effort: does not raise
     with pytest.raises(ConnectionError):
         await service.request_index_rebuild(file.collection_id)
+
+
+async def test_a_ready_analysis_is_announced_to_the_index_worker(session, storage, dispatcher, file) -> None:
+    service = AnalysisService(session, storage, dispatcher)
+    analysis = await service.create(ALICE, file.id)
+    assert dispatcher.indexed == []  # not before it is ready
+
+    await service.start(analysis.id)
+    context = await service.context(analysis.id)
+    await storage.put_json(context.result_key, {"sheets": []})
+    ready = await service.complete(analysis.id, context.result_key)
+
+    assert ready.status == AnalysisStatus.READY and dispatcher.indexed == [analysis.id]
+
+
+async def test_an_unreachable_queue_does_not_stop_an_analysis_from_becoming_ready(
+    session, storage, dispatcher, file
+) -> None:
+    service = AnalysisService(session, storage)  # create/start without queue
+    analysis = await service.create(ALICE, file.id)
+    await service.start(analysis.id)
+    context = await service.context(analysis.id)
+    await storage.put_json(context.result_key, {"sheets": []})
+    dispatcher.fail = True
+
+    ready = await AnalysisService(session, storage, dispatcher).complete(analysis.id, context.result_key)
+
+    assert ready.status == AnalysisStatus.READY
