@@ -1,6 +1,6 @@
 [project]
 name = "agent-worker"
-version = "0.3.0-rc"
+version = "0.3.0"
 description = "spreadsheet-analyser agent worker: answers chat messages (LangGraph plan then answer, searching the analyses)"
 requires-python = ">=3.12"
 dependencies = [
