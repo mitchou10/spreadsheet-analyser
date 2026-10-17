@@ -14,4 +14,7 @@ async def list_models(_: ActorDep, catalog: ModelCatalogDep) -> ModelsOut:
         models = await catalog.list_models()
     except ModelProviderError as error:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
-    return ModelsOut(default=catalog.default, models=[ModelOut(id=m.id, owned_by=m.owned_by) for m in models])
+    return ModelsOut(
+        default=await catalog.resolve_default(),
+        models=[ModelOut(id=m.id, owned_by=m.owned_by) for m in models],
+    )

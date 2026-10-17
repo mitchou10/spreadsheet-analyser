@@ -152,5 +152,10 @@ async def test_ensure_available_only_accepts_chat_capable_models() -> None:
             await catalog.ensure_available(unknown)
 
 
-def test_default_model_comes_from_settings() -> None:
-    assert ModelCatalog(settings(LLM_DEFAULT_MODEL="my-model")).default == "my-model"
+async def test_default_is_the_first_model_the_provider_offers() -> None:
+    client = FakeOpenAI({"zeta": None, "alpha": None})
+    assert await ModelCatalog(settings(), client).resolve_default() == "alpha"
+
+
+async def test_default_is_empty_when_the_provider_cannot_be_asked() -> None:
+    assert await ModelCatalog(settings()).resolve_default() == ""

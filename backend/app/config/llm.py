@@ -6,8 +6,6 @@ class LlmSettings(BaseSettings):
     # unset for api.openai.com. The worker reads the same variables to call the model.
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str | None = None
-    # Model used when a message does not pick one.
-    LLM_DEFAULT_MODEL: str = "gpt-4o"
     # Comma-separated ids to expose (providers also list embedding/audio/... models). Empty = everything listed.
     LLM_ALLOWED_MODELS: str = ""
     # Every listed model is probed with a tiny chat completion, and only the ones that answer are exposed.

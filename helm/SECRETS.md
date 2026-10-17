@@ -33,7 +33,7 @@ les valeurs par défaut du chart.
 | `OPENAI_API_KEY` | Clé du fournisseur de modèles (OpenAI ou compatible) | ✔ | ✔ | | | |
 
 Tout le reste (`KEYCLOAK_URL`, `KEYCLOAK_REALM`, `AWS_S3_BUCKET`, `AWS_ENDPOINT_URL_S3`, `OPENAI_BASE_URL`,
-`LLM_DEFAULT_MODEL`, `FRONTEND_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_URL`…) n'est pas secret et va dans `env:`.
+`FRONTEND_URL`, `BACKEND_PUBLIC_URL`, `BACKEND_URL`…) n'est pas secret et va dans `env:`.
 
 Précisions :
 

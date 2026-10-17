@@ -99,7 +99,7 @@ class RunService:
             Run(
                 conversation_id=conversation.id,
                 message_id=message.id,
-                model=conversation.model or default_model,
+                model=conversation.model or default_model or None,
                 requester_email=normalize_email(actor.email) or None,
             )
         )
