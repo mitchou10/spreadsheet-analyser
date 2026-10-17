@@ -3,12 +3,25 @@ import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useCollections } from '@/hooks/useCollections'
 import { useConversations } from '@/hooks/useConversations'
 import { useModels } from '@/hooks/useModels'
+import { useCurrentUser } from '@/auth/AuthContext'
 import { useState } from 'react'
+import { AdminView } from '../admin/AdminView'
 import { ChatView } from '../chat/ChatView'
 import { CollectionDetailView } from '../collections/CollectionDetailView'
 import { CollectionsListView } from '../collections/CollectionsListView'
 import { AppHeader } from './AppHeader'
 import { AppSidebar } from './AppSidebar'
+
+function Forbidden() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+      <p>Cette page est réservée aux administrateurs.</p>
+      <Link to="/chat" className="text-foreground underline">
+        Retour au chat
+      </Link>
+    </div>
+  )
+}
 
 function CollectionNotFound() {
   return (
@@ -23,6 +36,7 @@ function CollectionNotFound() {
 
 export function AppShell() {
   const navigate = useNavigate()
+  const { user } = useCurrentUser()
   const { pathname } = useLocation()
   // The URL is the source of truth for what is open: /chat/:conversationId, /collections/:collectionId.
   const activeId = useMatch('/chat/:conversationId')?.params.conversationId ?? null
@@ -69,6 +83,8 @@ export function AppShell() {
           onDelete={handleDeleteConversation}
           isCollectionsActive={pathname.startsWith('/collections')}
           onShowCollections={() => navigate('/collections')}
+          isAdminActive={pathname.startsWith('/admin')}
+          onShowAdmin={() => navigate('/admin')}
         />
         <SidebarInset>
           {error && (
@@ -134,6 +150,7 @@ export function AppShell() {
                 )
               }
             />
+            <Route path="/admin" element={user?.isAdmin ? <AdminView /> : <Forbidden />} />
             <Route path="*" element={<Navigate to="/chat" replace />} />
           </Routes>
         </SidebarInset>

@@ -10,6 +10,7 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_session
 from app.services import (
     Actor,
+    AdminService,
     AnalysisService,
     CollectionService,
     ConversationService,
@@ -100,3 +101,20 @@ def get_model_catalog() -> ModelCatalog:
 
 
 ModelCatalogDep = Annotated[ModelCatalog, Depends(get_model_catalog)]
+
+
+def get_admin(user: Annotated[RequestContext, Depends(get_current_user)]) -> Actor:
+    """Only administrators (Keycloak client role `admin`) get through; everyone else is refused with 403."""
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Administrator access required")
+    return Actor(user_id=user.user_id, email=user.email)
+
+
+AdminDep = Annotated[Actor, Depends(get_admin)]
+
+
+def get_admin_service(session: SessionDep) -> AdminService:
+    return AdminService(session)
+
+
+AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]

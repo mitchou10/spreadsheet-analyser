@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import KeycloakSettings
 from app.dependencies import get_storage
+from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.collections import collections_router, files_router
 from app.routers.conversations import router as conversations_router
@@ -40,6 +41,7 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     openapi_tags=[
         {"name": "Auth", "description": "Login/logout via Keycloak, session management."},
+        {"name": "Admin", "description": "Who has access to what (administrators only)."},
         {"name": "Collections", "description": "Collections, their files (upload) and sharing."},
         {"name": "Conversations", "description": "Chat conversations and their messages (private to their creator)."},
         {"name": "Models", "description": "LLMs available to the assistant."},
@@ -60,6 +62,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix="/api/auth")
+app.include_router(admin_router, prefix="/api")
 app.include_router(collections_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")

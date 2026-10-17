@@ -26,7 +26,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useCurrentUser } from '@/auth/AuthContext'
 import type { Conversation } from '@/types/conversation'
-import { FileSpreadsheet, LogOut, SquarePen, Trash2 } from 'lucide-react'
+import { FileSpreadsheet, LogOut, Shield, SquarePen, Trash2 } from 'lucide-react'
 
 interface AppSidebarProps {
   conversations: Conversation[]
@@ -36,6 +36,8 @@ interface AppSidebarProps {
   onDelete: (id: string) => void
   isCollectionsActive: boolean
   onShowCollections: () => void
+  isAdminActive: boolean
+  onShowAdmin: () => void
 }
 
 export function AppSidebar({
@@ -46,6 +48,8 @@ export function AppSidebar({
   onDelete,
   isCollectionsActive,
   onShowCollections,
+  isAdminActive,
+  onShowAdmin,
 }: AppSidebarProps) {
   const { user, logout } = useCurrentUser()
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
@@ -72,6 +76,14 @@ export function AppSidebar({
                   Collections
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              {user?.isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive={isAdminActive} onClick={onShowAdmin}>
+                    <Shield className="size-4" />
+                    Administration
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -84,7 +96,7 @@ export function AppSidebar({
               {conversations.map((conversation) => (
                 <SidebarMenuItem key={conversation.id}>
                   <SidebarMenuButton
-                    isActive={!isCollectionsActive && conversation.id === activeId}
+                    isActive={!isCollectionsActive && !isAdminActive && conversation.id === activeId}
                     onClick={() => onSelect(conversation.id)}
                   >
                     <span className="truncate">{conversation.title}</span>

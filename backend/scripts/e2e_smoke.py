@@ -169,6 +169,27 @@ def main() -> int:
         check("retry analysis re-queues it", retried.status_code == 202, retried.text)
         check("retried analysis becomes ready again", wait_for_analysis(file_id)["status"] == "ready")
 
+        # --- Administration (the dev user is an administrator) ---
+        admin_view = client.get(f"{api}/admin/collections")
+        check(
+            "admin lists every collection with its owner",
+            admin_view.status_code == 200
+            and any(item["collection_id"] == cid and item["owner_email"] for item in admin_view.json()),
+            admin_view.text[:300],
+        )
+        admin_grant = client.post(f"{api}/admin/collections/{cid}/access", json={"email": "Auditor@Example.com"})
+        check("admin grants access by email", admin_grant.status_code == 201, admin_grant.text)
+        people = client.get(f"{api}/admin/people").json()
+        check(
+            "admin sees the person with the collection",
+            any(p["email"] == "auditor@example.com" and p["collections"][0]["role"] == "viewer" for p in people),
+            people,
+        )
+        check(
+            "admin revokes it",
+            client.delete(f"{api}/admin/collections/{cid}/access/auditor@example.com").status_code == 204,
+        )
+
         # --- Sharing ---
         share = client.post(f"{api}/collections/{cid}/access", json={"email": "Someone@Example.com"})
         check("share by email", share.status_code == 201 and share.json()["email"] == "someone@example.com", share.text)
