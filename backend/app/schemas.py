@@ -129,3 +129,12 @@ class RunCompleteIn(BaseModel):
 
 class RunFailIn(BaseModel):
     error: str
+
+
+class InternalMessageOut(BaseModel):
+    id: uuid.UUID
+    role: MessageRole
+    content: str | None
+    collection_ids: list[uuid.UUID]
+    file_ids: list[uuid.UUID]
+    created_at: datetime
