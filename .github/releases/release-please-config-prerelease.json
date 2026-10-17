@@ -20,13 +20,28 @@
         },
         {
           "type": "toml",
+          "path": "backend/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='backend')].version"
+        },
+        {
+          "type": "toml",
           "path": "agent-worker/pyproject.toml",
           "jsonpath": "project.version"
         },
         {
           "type": "toml",
+          "path": "agent-worker/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='agent-worker')].version"
+        },
+        {
+          "type": "toml",
           "path": "analysis-worker/pyproject.toml",
           "jsonpath": "project.version"
+        },
+        {
+          "type": "toml",
+          "path": "analysis-worker/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='analysis-worker')].version"
         }
       ],
       "changelog-sections": [
