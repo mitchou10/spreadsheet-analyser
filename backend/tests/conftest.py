@@ -41,6 +41,8 @@ class FakeDispatcher:
     def __init__(self) -> None:
         self.enqueued: list[uuid.UUID] = []
         self.analyses: list[uuid.UUID] = []
+        self.forgotten: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.rebuilt: list[uuid.UUID] = []
         self.revoked: list[str] = []
         self.fail = False
 
@@ -55,6 +57,18 @@ class FakeDispatcher:
             raise ConnectionError("broker down")
         self.analyses.append(analysis_id)
         return f"analysis-task-{analysis_id}"
+
+    async def enqueue_index_forget(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> str:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.forgotten.append((collection_id, file_id))
+        return "forget-task"
+
+    async def enqueue_index_rebuild(self, collection_id: uuid.UUID) -> str:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.rebuilt.append(collection_id)
+        return "rebuild-task"
 
     async def revoke(self, task_id: str) -> None:
         self.revoked.append(task_id)

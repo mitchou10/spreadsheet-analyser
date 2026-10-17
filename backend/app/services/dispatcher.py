@@ -16,6 +16,14 @@ class RunDispatcher(Protocol):
         """Hands a spreadsheet analysis to the analysis worker; returns the queue's task id."""
         ...
 
+    async def enqueue_index_forget(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> str:
+        """Asks the analysis worker to drop a deleted file from its collection's search index."""
+        ...
+
+    async def enqueue_index_rebuild(self, collection_id: uuid.UUID) -> str:
+        """Asks the analysis worker to rebuild a collection's search index from its analyses."""
+        ...
+
     async def revoke(self, task_id: str) -> None: ...
 
 
@@ -28,6 +36,8 @@ class CeleryRunDispatcher:
         self._queue = settings.RUN_QUEUE
         self._analysis_task_name = settings.ANALYSIS_TASK_NAME
         self._analysis_queue = settings.ANALYSIS_QUEUE
+        self._forget_task_name = settings.INDEX_FORGET_TASK_NAME
+        self._rebuild_task_name = settings.INDEX_REBUILD_TASK_NAME
         self._celery = Celery("backend", broker=RedisSettings().REDIS_URL)
 
     async def enqueue(self, run_id: uuid.UUID) -> str:
@@ -38,6 +48,21 @@ class CeleryRunDispatcher:
     async def enqueue_analysis(self, analysis_id: uuid.UUID) -> str:
         result = await asyncio.to_thread(
             self._celery.send_task, self._analysis_task_name, args=[str(analysis_id)], queue=self._analysis_queue
+        )
+        return result.id
+
+    async def enqueue_index_forget(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> str:
+        result = await asyncio.to_thread(
+            self._celery.send_task,
+            self._forget_task_name,
+            args=[str(collection_id), str(file_id)],
+            queue=self._analysis_queue,
+        )
+        return result.id
+
+    async def enqueue_index_rebuild(self, collection_id: uuid.UUID) -> str:
+        result = await asyncio.to_thread(
+            self._celery.send_task, self._rebuild_task_name, args=[str(collection_id)], queue=self._analysis_queue
         )
         return result.id
 

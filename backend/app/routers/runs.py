@@ -15,6 +15,7 @@ from app.schemas import (
     AnalysisContextOut,
     AnalysisFailIn,
     AnalysisOut,
+    CollectionAnalysisOut,
     InternalMessageOut,
     RunCompleteIn,
     RunContextOut,
@@ -108,3 +109,10 @@ async def complete_analysis(
 @internal_router.post("/analyses/{analysis_id}/fail", summary="Mark the analysis failed")
 async def fail_analysis(analysis_id: uuid.UUID, body: AnalysisFailIn, service: AnalysisServiceDep) -> AnalysisOut:
     return AnalysisOut.model_validate(await service.fail(analysis_id, body.error))
+
+
+@internal_router.get(
+    "/collections/{collection_id}/analyses", summary="Files of a collection with a ready analysis (search index input)"
+)
+async def collection_analyses(collection_id: uuid.UUID, service: AnalysisServiceDep) -> list[CollectionAnalysisOut]:
+    return [CollectionAnalysisOut(**asdict(item)) for item in await service.ready_for_collection(collection_id)]

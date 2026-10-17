@@ -90,9 +90,10 @@ class FileService:
         file = await self.get(actor, file_id)
         return file, await self.storage.get_object(file.s3_key)
 
-    async def delete(self, actor: Actor, file_id: uuid.UUID) -> None:
+    async def delete(self, actor: Actor, file_id: uuid.UUID) -> File:
         file = await self.get_owned(actor, file_id)
         prefix = f"{file.collection_id}/{file.id}/"
         await self.files.delete(file)
         await self.session.commit()
         await self.storage.delete_prefix(prefix)
+        return file

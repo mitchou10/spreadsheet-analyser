@@ -114,3 +114,66 @@ async def test_unreachable_queue_marks_the_analysis_failed(session, storage, dis
     analysis = await AnalysisService(session, storage, dispatcher).create(ALICE, file.id)
 
     assert analysis.status == AnalysisStatus.ERROR and "unreachable" in analysis.error
+
+
+async def test_context_tells_the_worker_which_collection_the_file_belongs_to(session, storage, file) -> None:
+    analysis = await AnalysisService(session, storage).create(ALICE, file.id)
+
+    context = await AnalysisService(session, storage).context(analysis.id)
+
+    assert (context.collection_id, context.collection_name) == (file.collection_id, "Sales")
+
+
+async def _make_ready(session, storage, file_id):
+    service = AnalysisService(session, storage)
+    analysis = await service.create(ALICE, file_id)
+    await service.start(analysis.id)
+    context = await service.context(analysis.id)
+    await storage.put_json(context.result_key, {"sheets": []})
+    await service.complete(analysis.id, context.result_key)
+    return context.result_key
+
+
+async def test_ready_for_collection_lists_only_files_with_a_ready_analysis(session, storage, file) -> None:
+    service = AnalysisService(session, storage)
+    uploads = FileService(session, storage)
+    ready_key = await _make_ready(session, storage, file.id)
+    pending = await uploads.upload(ALICE, file.collection_id, "pending.csv", b"p")  # never analysed
+    failed = await uploads.upload(ALICE, file.collection_id, "failed.csv", b"f")
+    broken = await service.create(ALICE, failed.id)
+    await service.start(broken.id)
+    await service.fail(broken.id, "boom")
+
+    ready = await service.ready_for_collection(file.collection_id)
+
+    assert [(r.file_id, r.file_name, r.collection_name, r.version, r.result_key) for r in ready] == [
+        (file.id, "a.csv", "Sales", 1, ready_key)
+    ]
+    assert pending.id not in {r.file_id for r in ready}
+
+
+async def test_ready_for_an_unknown_collection_is_not_found(session, storage) -> None:
+    with pytest.raises(NotFoundError):
+        await AnalysisService(session, storage).ready_for_collection(uuid.uuid4())
+
+
+async def test_forgetting_a_file_and_rebuilding_an_index_are_sent_to_the_worker(
+    session, storage, dispatcher, file
+) -> None:
+    service = AnalysisService(session, storage, dispatcher)
+
+    await service.forget_file(file.collection_id, file.id)
+    await service.request_index_rebuild(file.collection_id)
+
+    assert dispatcher.forgotten == [(file.collection_id, file.id)] and dispatcher.rebuilt == [file.collection_id]
+
+
+async def test_an_unreachable_queue_never_blocks_a_file_deletion_but_fails_a_rebuild_request(
+    session, storage, dispatcher, file
+) -> None:
+    service = AnalysisService(session, storage, dispatcher)
+    dispatcher.fail = True
+
+    await service.forget_file(file.collection_id, file.id)  # best effort: does not raise
+    with pytest.raises(ConnectionError):
+        await service.request_index_rebuild(file.collection_id)
