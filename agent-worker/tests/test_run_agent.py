@@ -86,6 +86,9 @@ class FakeStorage:
     def get_json(self, key: str, max_bytes: int | None = None):
         return self.objects[key]
 
+    def get_bytes(self, key: str, max_bytes: int | None = None) -> bytes | None:
+        return None  # no saved search index: the agent indexes the analyses in memory
+
 
 class FakeLLM:
     """Scripted chat model: returns the queued replies in order and records every prompt it receives.

@@ -26,3 +26,14 @@ class S3Reader:
             response["Body"].close()
             raise ValueError(f"{key} is {response['ContentLength']} bytes, over the {max_bytes} bytes limit")
         return json.loads(response["Body"].read())
+
+    def get_bytes(self, key: str, max_bytes: int | None = None) -> bytes | None:
+        """Reads an object, or None if it does not exist. Refuses objects over `max_bytes` instead of loading them."""
+        try:
+            response = self._client.get_object(Bucket=self.bucket, Key=key)
+        except self._client.exceptions.NoSuchKey:
+            return None
+        if max_bytes is not None and response.get("ContentLength", 0) > max_bytes:
+            response["Body"].close()
+            raise ValueError(f"{key} is {response['ContentLength']} bytes, over the {max_bytes} bytes limit")
+        return response["Body"].read()
