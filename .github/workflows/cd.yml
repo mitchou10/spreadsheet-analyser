@@ -116,9 +116,12 @@ jobs:
                     - name: backend
                       context: backend
                       dockerfile: backend/Dockerfile
-                    - name: worker
-                      context: worker
-                      dockerfile: worker/Dockerfile
+                    - name: agent-worker
+                      context: agent-worker
+                      dockerfile: agent-worker/Dockerfile
+                    - name: analysis-worker
+                      context: analysis-worker
+                      dockerfile: analysis-worker/Dockerfile
         with:
             IMAGE_NAME: ${{ needs.expose-vars.outputs.IMAGE_BASE }}/${{ matrix.service.name }}
             IMAGE_TAG: ${{ needs.release.outputs.version }}

@@ -81,7 +81,8 @@ jobs:
                 service:
                     - frontend
                     - backend
-                    - worker
+                    - agent-worker
+                    - analysis-worker
         with:
             IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}:pr-${{ matrix.pr.number }}
 
@@ -97,7 +98,8 @@ jobs:
                 service:
                     - frontend
                     - backend
-                    - worker
+                    - agent-worker
+                    - analysis-worker
         with:
             IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}
             CLEAN_TAGGED: false
