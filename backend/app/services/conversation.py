@@ -1,0 +1,105 @@
+import uuid
+from collections.abc import Sequence
+
+from sqlalchemy import func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Collection, Conversation, ConversationStatus, File, Message, MessageRole
+from app.repositories import CollectionRepository, ConversationRepository, FileRepository, MessageRepository
+from app.services.access import CollectionAccessPolicy
+from app.services.actor import Actor
+from app.services.errors import NotFoundError
+
+
+class ConversationService:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.conversations = ConversationRepository(session)
+        self.messages = MessageRepository(session)
+        self.collections = CollectionRepository(session)
+        self.files = FileRepository(session)
+        self.access = CollectionAccessPolicy(session)
+
+    async def create(self, actor: Actor, title: str | None = None) -> Conversation:
+        conversation = Conversation(user_id=actor.user_id)
+        if title:
+            conversation.title = title
+        await self.conversations.add(conversation)
+        await self.session.commit()
+        return conversation
+
+    async def list_for_user(self, actor: Actor) -> list[Conversation]:
+        return await self.conversations.list_by_user(actor.user_id)
+
+    async def get(self, actor: Actor, conversation_id: uuid.UUID) -> Conversation:
+        conversation = await self.conversations.get(conversation_id)
+        if conversation is None or conversation.user_id != actor.user_id:
+            raise NotFoundError(f"Conversation {conversation_id} not found")
+        return conversation
+
+    async def delete(self, actor: Actor, conversation_id: uuid.UUID) -> None:
+        await self.conversations.delete(await self.get(actor, conversation_id))
+        await self.session.commit()
+
+    async def set_status(self, actor: Actor, conversation_id: uuid.UUID, status: ConversationStatus) -> Conversation:
+        conversation = await self.get(actor, conversation_id)
+        conversation.status = status
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        return conversation
+
+    async def list_messages(self, actor: Actor, conversation_id: uuid.UUID) -> list[Message]:
+        await self.get(actor, conversation_id)
+        return await self.messages.list_by_conversation(conversation_id)
+
+    async def add_message(
+        self,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        role: MessageRole,
+        content: str | None = None,
+        tool_calls: list[dict] | None = None,
+        tool_call_id: str | None = None,
+        collection_ids: Sequence[uuid.UUID] = (),
+        file_ids: Sequence[uuid.UUID] = (),
+    ) -> Message:
+        """`collection_ids` / `file_ids` optionally restrict what this message is about."""
+        conversation = await self.get(actor, conversation_id)
+        collections = await self._readable_collections(actor, collection_ids)
+        files = await self._readable_files(actor, file_ids)
+        message = await self.messages.add(
+            Message(
+                conversation_id=conversation.id,
+                role=role,
+                content=content,
+                tool_calls=tool_calls,
+                tool_call_id=tool_call_id,
+                collections=collections,
+                files=files,
+            )
+        )
+        # Bump updated_at so the conversation list sorts by latest activity.
+        conversation.updated_at = func.now()
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        return message
+
+    async def _readable_collections(self, actor: Actor, ids: Sequence[uuid.UUID]) -> list[Collection]:
+        """Collections the caller owns or that were shared with them."""
+        collections: list[Collection] = []
+        for id in dict.fromkeys(ids):
+            collection = await self.collections.get(id)
+            if collection is None or not await self.access.can_read(actor, collection):
+                raise NotFoundError(f"Collection {id} not found")
+            collections.append(collection)
+        return collections
+
+    async def _readable_files(self, actor: Actor, ids: Sequence[uuid.UUID]) -> list[File]:
+        files: list[File] = []
+        for id in dict.fromkeys(ids):
+            file = await self.files.get(id)
+            collection = await self.collections.get(file.collection_id) if file else None
+            if file is None or collection is None or not await self.access.can_read(actor, collection):
+                raise NotFoundError(f"File {id} not found")
+            files.append(file)
+        return files

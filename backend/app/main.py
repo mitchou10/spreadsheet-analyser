@@ -1,13 +1,32 @@
+import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import KeycloakSettings
+from app.dependencies import get_storage
 from app.routers.auth import router as auth_router
 from app.routers.health import router as health_router
 
 _keycloak_settings = KeycloakSettings()
 
+logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    try:
+        await get_storage().ensure_bucket()
+    except Exception:
+        # Don't block startup: /api/health and auth keep working while S3 is down.
+        logger.exception("Could not ensure the S3 bucket exists")
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="spreadsheet-analyser API",
     docs_url="/api/docs",
     redoc_url="/api/redocs",
