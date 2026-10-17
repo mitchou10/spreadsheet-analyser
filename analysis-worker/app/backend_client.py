@@ -105,3 +105,21 @@ class BackendClient:
     def query_fail(self, query_id: str, error: str, tables: list[dict] | None = None) -> dict:
         """`tables` lists what could be queried (as the SQL must name it), so that the author can correct itself."""
         return self._request("POST", f"/queries/{query_id}/fail", {"error": error, "tables": tables or []})
+
+    # --- Charts (agent -> backend -> this worker) ---
+
+    def chart_context(self, chart_id: str) -> dict:
+        """{chart_id, spec, sql, tables, s3_key}: what to draw, from which query, and where to write the PNG."""
+        return self._request("GET", f"/charts/{chart_id}/context")
+
+    def chart_start(self, chart_id: str) -> dict:
+        return self._request("POST", f"/charts/{chart_id}/start")
+
+    def chart_complete(self, chart_id: str, s3_key: str, width: int, height: int) -> dict:
+        return self._request(
+            "POST", f"/charts/{chart_id}/complete", {"s3_key": s3_key, "width": width, "height": height}
+        )
+
+    def chart_fail(self, chart_id: str, error: str, columns: list[dict] | None = None) -> dict:
+        """`columns` is what the query returns ([{name, type}]), so that the author can correct its request."""
+        return self._request("POST", f"/charts/{chart_id}/fail", {"error": error, "columns": columns or []})
