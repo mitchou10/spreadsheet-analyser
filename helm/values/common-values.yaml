@@ -152,6 +152,8 @@ query_worker:
     QUERY_MEMORY_LIMIT: "512MB"
     QUERY_TIMEOUT_SECONDS: "30"
     QUERY_MAX_ROWS: "200"
+    # The same worker draws the charts of the answers (PNG written to S3, served by the backend).
+    CHART_MAX_POINTS: "5000"
   # CPU is what this worker is for: let a query use two cores (DuckDB runs QUERY_THREADS threads, 2 by default).
   resources:
     requests:
