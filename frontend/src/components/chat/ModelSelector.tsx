@@ -29,7 +29,7 @@ export function ModelSelector({ models, isLoading, error, value, onChange }: Mod
       <select
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value)}
-        className="h-7 max-w-56 truncate rounded-md border border-input bg-transparent px-2 text-xs text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:bg-input/30"
+        className="h-8 max-w-56 truncate rounded-full border-0 bg-transparent px-2 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         {models.map((model) => (
           <option key={model.id} value={model.id}>
