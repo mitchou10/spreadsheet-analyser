@@ -212,7 +212,7 @@ async def _send(client, conversation_id: str, content: str = "q") -> dict:
 
 async def test_run_flow_through_internal_api(client, dispatcher, monkeypatch) -> None:
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
-    worker = {"X-Internal-Token": "secret"}
+    worker = {"Authorization": "Bearer secret"}
     conversation = (await client.post("/api/conversations", json={})).json()
 
     sent = await _send(client, conversation["id"], "Résume")
@@ -240,7 +240,7 @@ async def test_run_flow_through_internal_api(client, dispatcher, monkeypatch) ->
 
 async def test_cancel_run_route_and_worker_conflict(client, monkeypatch) -> None:
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
-    worker = {"X-Internal-Token": "secret"}
+    worker = {"Authorization": "Bearer secret"}
     conversation = (await client.post("/api/conversations", json={})).json()
     run = (await _send(client, conversation["id"])).json()["run"]
 
@@ -258,9 +258,9 @@ async def test_internal_api_requires_the_token(client, monkeypatch) -> None:
 
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
     assert (await client.post(f"/api/internal/runs/{run_id}/start")).status_code == 401
-    wrong = await client.post(f"/api/internal/runs/{run_id}/start", headers={"X-Internal-Token": "nope"})
+    wrong = await client.post(f"/api/internal/runs/{run_id}/start", headers={"Authorization": "Bearer nope"})
     assert wrong.status_code == 401
-    right = await client.post(f"/api/internal/runs/{run_id}/start", headers={"X-Internal-Token": "secret"})
+    right = await client.post(f"/api/internal/runs/{run_id}/start", headers={"Authorization": "Bearer secret"})
     assert right.status_code == 404
 
 
@@ -273,3 +273,21 @@ async def test_runs_are_private_over_http(client) -> None:
     assert (await client.get(f"/api/runs/{run['id']}")).status_code == 404
     assert (await client.post(f"/api/runs/{run['id']}/cancel")).status_code == 404
     assert (await client.get(f"/api/conversations/{conversation['id']}/active-run")).status_code == 404
+
+
+async def test_internal_history_exposes_messages_with_scope(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    collection = await _create(client)
+    conversation = (await client.post("/api/conversations", json={})).json()
+    await client.post(
+        f"/api/conversations/{conversation['id']}/messages",
+        json={"content": "Résume", "collection_ids": [collection["id"]]},
+    )
+    url = f"/api/internal/conversations/{conversation['id']}/messages"
+
+    assert (await client.get(url)).status_code == 401
+    history = (await client.get(url, headers={"Authorization": "Bearer secret"})).json()
+
+    assert [(m["role"], m["content"], m["collection_ids"]) for m in history] == [("user", "Résume", [collection["id"]])]
+    missing = "/api/internal/conversations/00000000-0000-0000-0000-000000000000/messages"
+    assert (await client.get(missing, headers={"Authorization": "Bearer secret"})).status_code == 404

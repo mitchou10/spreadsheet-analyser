@@ -1,6 +1,6 @@
 import logging
 
-from app.agent import generate_reply
+from app.agent import build_graph, build_llm
 from app.backend_client import BackendClient, RunConflict
 from app.celery_app import celery_app
 
@@ -8,11 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="worker.run_agent")
-def run_agent(run_id: str, client: BackendClient | None = None) -> str:
+def run_agent(run_id: str, client: BackendClient | None = None, llm=None) -> str:
     """Executes one assistant run: queued -> running -> completed/failed, reporting through the backend.
 
-    Returns the final status for logs/tests. `client` is injectable for tests."""
-    client = client or BackendClient()
+    The agent graph only needs the conversation id; the run id is just for lifecycle reporting.
+    Returns the final status for logs/tests. `client` and `llm` are injectable for tests."""
+    client = client or BackendClient.from_env()
     try:
         client.start(run_id)
     except RunConflict:
@@ -20,8 +21,10 @@ def run_agent(run_id: str, client: BackendClient | None = None) -> str:
         return "skipped"
 
     try:
-        reply = generate_reply(client.context(run_id))
-        client.complete(run_id, reply)
+        conversation_id = client.context(run_id)["conversation_id"]
+        graph = build_graph(llm or build_llm(), client)
+        result = graph.invoke({"conversation_id": conversation_id})
+        client.complete(run_id, result["answer"])
     except RunConflict:
         logger.info("Run %s was cancelled while running, discarding the reply", run_id)
         return "cancelled"

@@ -1,7 +1,8 @@
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import InternalSettings
@@ -72,10 +73,17 @@ def get_run_service(session: SessionDep, dispatcher: Annotated[RunDispatcher, De
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
 
 
-def require_internal_token(x_internal_token: Annotated[str | None, Header()] = None) -> None:
-    """Guards /api/internal/*: only the worker (shared secret) may call it."""
+_internal_bearer = HTTPBearer(auto_error=False, description="Shared INTERNAL_API_TOKEN, used by the workers.")
+
+
+def require_internal_token(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_internal_bearer)],
+) -> None:
+    """Guards /api/internal/*: only the workers (shared secret as a Bearer token) may call it."""
     expected = InternalSettings().INTERNAL_API_TOKEN
     if not expected:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Internal API is disabled (INTERNAL_API_TOKEN unset)")
-    if x_internal_token is None or not secrets.compare_digest(x_internal_token, expected):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid internal token")
+    if credentials is None or not secrets.compare_digest(credentials.credentials, expected):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid internal token", headers={"WWW-Authenticate": "Bearer"}
+        )

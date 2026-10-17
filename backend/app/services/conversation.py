@@ -62,6 +62,12 @@ class ConversationService:
         await self.get(actor, conversation_id)
         return await self.messages.list_by_conversation(conversation_id)
 
+    async def history(self, conversation_id: uuid.UUID) -> list[Message]:
+        """All messages of a conversation, for trusted callers (the worker) - no ownership check."""
+        if await self.conversations.get(conversation_id) is None:
+            raise NotFoundError(f"Conversation {conversation_id} not found")
+        return await self.messages.list_by_conversation(conversation_id)
+
     async def add_message(
         self,
         actor: Actor,
