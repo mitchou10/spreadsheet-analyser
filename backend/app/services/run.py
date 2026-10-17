@@ -218,13 +218,13 @@ class RunService:
         await self.session.refresh(run)
         return run
 
-    async def complete(self, run_id: uuid.UUID, content: str) -> Run:
+    async def complete(self, run_id: uuid.UUID, content: str, trace: dict | None = None) -> Run:
         """Stores the assistant reply and closes the run. Refused if the user cancelled it meanwhile."""
         run = await self._require(run_id)
         if run.status != RunStatus.RUNNING:
             raise ConflictError(f"Run {run_id} is {run.status}, not running")
         conversation = await self.conversations.conversations.get(run.conversation_id)
-        reply = await self.conversations.stage_message(conversation, MessageRole.ASSISTANT, content)
+        reply = await self.conversations.stage_message(conversation, MessageRole.ASSISTANT, content, trace=trace)
         run.result_message_id = reply.id
         return await self._finish(run, RunStatus.COMPLETED)
 
