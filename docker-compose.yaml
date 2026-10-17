@@ -1,4 +1,70 @@
 services:
+  frontend:
+    build:
+      context: frontend
+      target: runtime
+    ports:
+      # Host 8081, not 8080: Keycloak already claims host 8080 below.
+      - "8081:8080"
+    depends_on:
+      - backend
+
+  # One-shot: runs Alembic migrations to head, then exits.
+  migrate:
+    build:
+      context: backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://spreadsheet_analyser:spreadsheet_analyser@postgres:5432/spreadsheet_analyser
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: backend
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql+asyncpg://spreadsheet_analyser:spreadsheet_analyser@postgres:5432/spreadsheet_analyser
+      REDIS_URL: redis://redis:6379/0
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8080
+      KEYCLOAK_REALM: spreadsheet-analyser
+      KEYCLOAK_CLIENT_ID: spreadsheet-analyser-backend
+      KEYCLOAK_CLIENT_SECRET: dev-only-secret-not-for-prod
+      # Public URL the browser uses to reach the backend. Used to build the
+      # fixed OAuth2 redirect_uri registered in Keycloak
+      # ({BACKEND_PUBLIC_URL}/api/auth/callback).
+      BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8000}
+      # :8081 by default (the dockerized frontend service above). Override to
+      # http://localhost:5173 in a local .env when running the frontend dev
+      # server instead - the redirect after login and CORS both key off this
+      # single origin, so it must match whichever frontend you're actually using.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8081}
+      SESSION_COOKIE_SECURE: "false"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build:
+      context: worker
+      target: runtime
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -9,42 +75,46 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spreadsheet_analyser"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  backend:
-    build:
-      context: backend
-      target: runtime
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev --import-realm
     environment:
-      DATABASE_URL: postgresql+asyncpg://spreadsheet_analyser:spreadsheet_analyser@postgres:5432/spreadsheet_analyser
-      REDIS_URL: redis://redis:6379/0
-    ports:
-      - "8000:8000"
-    depends_on:
-      - postgres
-      - redis
-
-  worker:
-    build:
-      context: worker
-      target: runtime
-    environment:
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - redis
-
-  frontend:
-    build:
-      context: frontend
-      target: runtime
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./docker/keycloak/realm-spreadsheet-analyser.json:/opt/keycloak/data/import/realm-spreadsheet-analyser.json:ro
     ports:
       - "8080:8080"
-    depends_on:
-      - backend
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nhost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '\"status\": \"UP\"'",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
 volumes:
   postgres_data:
