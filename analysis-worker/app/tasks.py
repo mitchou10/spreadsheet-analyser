@@ -2,6 +2,7 @@ from app.analysis.storage import AnalysisStorage
 from app.analysis.task import execute_analysis
 from app.backend_client import BackendClient
 from app.celery_app import celery_app
+from app.query.task import execute_query
 
 
 @celery_app.task(name="analysis.run")
@@ -10,3 +11,10 @@ def run_analysis(analysis_id: str, client: BackendClient | None = None, storage:
     worker process with its own memory limit. The search indexes are not its business: the backend tells the
     index worker when an analysis is ready."""
     return execute_analysis(analysis_id, client or BackendClient.from_env(), storage or AnalysisStorage())
+
+
+@celery_app.task(name="analysis.query")
+def run_query(query_id: str, client: BackendClient | None = None, storage: AnalysisStorage | None = None) -> str:
+    """Runs one SQL query over the Parquet copies of sheets (see app.query). Own queue, same worker image: a person
+    waiting for an answer must not queue behind the analysis of a large file."""
+    return execute_query(query_id, client or BackendClient.from_env(), storage or AnalysisStorage())

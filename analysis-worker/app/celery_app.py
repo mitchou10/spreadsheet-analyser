@@ -7,7 +7,7 @@ celery_app = Celery(
 )
 
 # Spreadsheet analysis has its own queue and its own worker (the agent runs elsewhere: agent-worker).
-celery_app.conf.task_routes = {"analysis.run": {"queue": "analysis"}}
+celery_app.conf.task_routes = {"analysis.run": {"queue": "analysis"}, "analysis.query": {"queue": "query"}}
 
 
 @celery_app.task(name="analysis.ping")
