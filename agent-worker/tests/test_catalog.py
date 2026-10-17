@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from app.agent.catalog import Catalog, CatalogError, FileEntry
-from app.agent.text import canon, tokenize
+from app.agent.catalog import Catalog, CatalogError
 from app.agent.tools import MAX_TOOL_OUTPUT_CHARS, build_tools
+from app.search.text import canon, tokenize
 
 
 def column(name, kind="text", **extra):
@@ -36,15 +36,39 @@ def sheet(name, columns, rows=100):
     }
 
 
+class FakeStorage:
+    """In-memory S3: analyse.json reports and (optionally) saved search indexes."""
+
+    def __init__(self, reports: dict[str, dict], blobs: dict[str, bytes] | None = None) -> None:
+        self.reports, self.blobs = reports, blobs or {}
+        self.reads: list[str] = []
+
+    def get_json(self, key: str, max_bytes: int | None = None):
+        self.reads.append(key)
+        return self.reports[key]
+
+    def get_bytes(self, key: str, max_bytes: int | None = None) -> bytes | None:
+        self.reads.append(key)
+        return self.blobs.get(key)
+
+
 def entry(ref, file_name, collection, sheets, status="ready"):
+    """(backend description of the file, its analyse.json or None) - the order of the entries gives f1, f2..."""
     meta = {
         "file_id": f"id-{ref}",
         "file_name": file_name,
+        "collection_id": f"col-{collection}",
         "collection_name": collection,
         "version": 1,
         "analysis_status": status,
+        "result_key": f"col-{collection}/id-{ref}/versions/1/analyse.json" if sheets is not None else None,
     }
-    return FileEntry(ref, meta, {"sheets": sheets} if sheets is not None else None)
+    return meta, ({"sheets": sheets} if sheets is not None else None)
+
+
+def build(*entries, blobs: dict[str, bytes] | None = None) -> Catalog:
+    reports = {meta["result_key"]: report for meta, report in entries if report is not None}
+    return Catalog.load([meta for meta, _ in entries], FakeStorage(reports, blobs))
 
 
 @pytest.fixture
@@ -92,7 +116,7 @@ def catalog() -> Catalog:
         ],
     )
     pending = entry("f3", "brouillon.csv", "RH", None, status="pending")
-    return Catalog([sales, hr, pending])
+    return build(sales, hr, pending)
 
 
 def names(result: dict, kind: str = "columns") -> list[str]:
@@ -253,7 +277,7 @@ def test_overview_and_listing(catalog) -> None:
 
 
 def test_overview_is_capped_for_big_libraries() -> None:
-    many = Catalog([entry(f"f{i}", f"file{i}.csv", "C", [sheet("S", [column("a")])]) for i in range(1, 61)])
+    many = build(*[entry(f"f{i}", f"file{i}.csv", "C", [sheet("S", [column("a")])]) for i in range(1, 61)])
 
     lines = many.overview().splitlines()
 
@@ -275,7 +299,7 @@ def test_tools_return_json_and_turn_errors_into_text(catalog) -> None:
 
 
 def test_huge_tool_output_is_clipped() -> None:
-    many = Catalog([entry(f"f{i}", f"file_number_{i}.csv", "C", [sheet("S", [column("a")])]) for i in range(1, 151)])
+    many = build(*[entry(f"f{i}", f"file_number_{i}.csv", "C", [sheet("S", [column("a")])]) for i in range(1, 151)])
     tool = next(t for t in build_tools(lambda: many) if t.name == "list_files")
 
     output = tool.invoke({})

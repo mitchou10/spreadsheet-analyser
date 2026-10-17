@@ -9,7 +9,7 @@ import math
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
-from app.agent.text import SYNONYMS, tokenize
+from app.search.text import SYNONYMS, tokenize
 
 K1, B = 1.4, 0.6
 SYNONYM_WEIGHT, PREFIX_WEIGHT, FUZZY_WEIGHT = 0.6, 0.75, 0.7
@@ -17,14 +17,22 @@ SYNONYM_WEIGHT, PREFIX_WEIGHT, FUZZY_WEIGHT = 0.6, 0.75, 0.7
 
 @dataclass
 class Doc:
-    """One searchable item. `fields` maps a field name to its tokens; `payload` is whatever the caller wants back."""
+    """One searchable item. `fields` maps a field name to its tokens; `payload` is a JSON-able dict that the
+    caller gets back with each hit (so that a saved index can answer without re-reading the source data)."""
 
-    payload: object
+    payload: dict
     fields: dict[str, list[str]]
     counts: dict[str, Counter] = field(init=False)
 
     def __post_init__(self) -> None:
         self.counts = {name: Counter(tokens) for name, tokens in self.fields.items()}
+
+    def to_state(self) -> dict:
+        return {"payload": self.payload, "fields": self.fields}
+
+    @classmethod
+    def from_state(cls, state: dict) -> "Doc":
+        return cls(payload=state["payload"], fields=state["fields"])
 
 
 @dataclass
@@ -36,11 +44,28 @@ class Hit:
 
 
 class Index:
-    def __init__(self, docs: list[Doc], field_weights: dict[str, float]) -> None:
+    """BM25 index over weighted fields. Built from documents, or restored from `state()`: restoring skips
+    counting every token of every document again (document frequencies and field lengths are saved)."""
+
+    def __init__(self, docs: list[Doc], field_weights: dict[str, float], state: dict | None = None) -> None:
         self.docs = docs
         self.weights = field_weights
-        self.postings: dict[str, set[int]] = defaultdict(set)
-        document_frequency: Counter = Counter()
+        if state is None:
+            state = self._compute_state(docs, field_weights)
+        elif state["doc_count"] != len(docs):
+            raise ValueError("The saved index state does not match its documents")
+        self.postings: dict[str, set[int]] = {token: set(numbers) for token, numbers in state["postings"].items()}
+        self.average_length: dict[str, float] = state["avg_length"]
+        count = max(len(docs), 1)
+        self.idf = {
+            token: math.log(1 + (count - len(numbers) + 0.5) / (len(numbers) + 0.5))
+            for token, numbers in self.postings.items()
+        }
+        self.vocabulary = sorted(self.postings)
+
+    @staticmethod
+    def _compute_state(docs: list[Doc], field_weights: dict[str, float]) -> dict:
+        postings: dict[str, list[int]] = defaultdict(list)
         field_lengths: dict[str, int] = defaultdict(int)
         for number, doc in enumerate(docs):
             seen = set()
@@ -48,15 +73,21 @@ class Index:
                 field_lengths[name] += sum(counts.values())
                 seen.update(counts)
             for token in seen:
-                self.postings[token].add(number)
-                document_frequency[token] += 1
+                postings[token].append(number)
         count = max(len(docs), 1)
-        self.average_length = {name: (field_lengths[name] / count) or 1.0 for name in field_weights}
-        self.idf = {
-            token: math.log(1 + (count - frequency + 0.5) / (frequency + 0.5))
-            for token, frequency in document_frequency.items()
+        return {
+            "doc_count": len(docs),
+            "avg_length": {name: (field_lengths[name] / count) or 1.0 for name in field_weights},
+            "postings": dict(postings),
         }
-        self.vocabulary = sorted(self.postings)
+
+    def state(self) -> dict:
+        """What is needed to restore this index next to its documents (JSON-able)."""
+        return {
+            "doc_count": len(self.docs),
+            "avg_length": self.average_length,
+            "postings": {token: sorted(numbers) for token, numbers in self.postings.items()},
+        }
 
     def _variants(self, token: str) -> list[tuple[str, float]]:
         """The index words a query word can stand for, with a confidence weight."""
