@@ -6,8 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.43.114",
     "celery>=5.4.0",
+    "duckdb>=1.5.6",
     "httpx>=0.28.1",
     "openpyxl>=3.1.5",
+    "pyarrow>=26.0.0",
     "redis>=5.2.0",
     "xlrd>=2.0.2",
 ]

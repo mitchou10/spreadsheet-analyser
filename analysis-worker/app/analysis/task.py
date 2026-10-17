@@ -7,6 +7,7 @@ from app.analysis.analyzer import analyze_file
 from app.analysis.limits import Limits
 from app.analysis.readers import UnreadableFile, UnsupportedFormat
 from app.analysis.storage import AnalysisStorage
+from app.analysis.tables import table_key, write_tables
 from app.backend_client import BackendClient, RunConflict
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,13 @@ def execute_analysis(
             local = Path(tmp) / f"source{Path(context['file_name']).suffix.lower()}"
             storage.download(context["source_key"], local)
             result = analyze_file(local, context["file_name"], limits)
+            # Second pass: typed copies of the sheets, for SQL. They go to S3 before analyse.json so that an
+            # analysis that is ready always has its tables.
+            tables = Path(tmp) / "tables"
+            tables.mkdir()
+            for index, described in write_tables(local, context["file_name"], result, tables, limits).items():
+                result["sheets"][index]["table"] = described
+                storage.upload_file(table_key(context["result_key"], index), tables / f"{index}.parquet")
         storage.upload_json(context["result_key"], json.dumps(result, ensure_ascii=False, allow_nan=False).encode())
         client.analysis_complete(analysis_id, context["result_key"])
     except RunConflict:
