@@ -18,6 +18,7 @@ from app.services import (
     StorageService,
 )
 from app.services.dispatcher import CeleryRunDispatcher, RunDispatcher
+from app.services.models import ModelCatalog
 
 
 def get_actor(user: Annotated[RequestContext, Depends(get_current_user)]) -> Actor:
@@ -87,3 +88,13 @@ def require_internal_token(
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED, "Invalid internal token", headers={"WWW-Authenticate": "Bearer"}
         )
+
+
+_model_catalog = ModelCatalog()
+
+
+def get_model_catalog() -> ModelCatalog:
+    return _model_catalog
+
+
+ModelCatalogDep = Annotated[ModelCatalog, Depends(get_model_catalog)]

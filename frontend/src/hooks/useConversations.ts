@@ -72,10 +72,10 @@ export function useConversations(activeId: string | null) {
   }, [pendingRun?.run.id, refresh]) // eslint-disable-line react-hooks/exhaustive-deps
 
   /** Sends to the open conversation, or starts one first. Resolves to the conversation id (undefined on failure). */
-  const send = (content: string) =>
+  const send = (content: string, model?: string) =>
     run_(async () => {
       const id = activeId ?? (await api.createConversation()).id
-      const sent = await api.sendMessage(id, content)
+      const sent = await api.sendMessage(id, content, model)
       setMessages((prev) => ({ loaded: id, items: [...(prev.loaded === id ? prev.items : []), ...sent.messages] }))
       setRun({ conversationId: id, run: sent.run })
       // Refetch: the backend names a new conversation after its first message.

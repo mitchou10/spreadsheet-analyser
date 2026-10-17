@@ -23,6 +23,7 @@ class RunContext:
     run_id: uuid.UUID
     conversation_id: uuid.UUID
     user_id: str
+    model: str | None
     messages: list[dict]  # [{"role", "content"}] of the conversation, oldest first
     collection_ids: list[uuid.UUID]  # scope the user picked on the triggering message
     file_ids: list[uuid.UUID]
@@ -45,17 +46,29 @@ class RunService:
         content: str,
         collection_ids: Sequence[uuid.UUID] = (),
         file_ids: Sequence[uuid.UUID] = (),
+        model: str | None = None,
+        default_model: str | None = None,
     ) -> tuple[Message, Run]:
-        """Stores the user message and queues a run to answer it, atomically; then hands it to the worker."""
+        """Stores the user message and queues a run to answer it, atomically; then hands it to the worker.
+        The run uses `model` if given (which also becomes the conversation's model from now on), else the
+        conversation's model, else `default_model`. Validating a given `model` is the caller's job."""
         conversation = await self.conversations.get(actor, conversation_id)
         if await self.runs.get_active_for_conversation(conversation.id) is not None:
             raise ConflictError("The assistant is still answering the previous message")
         collections, files = await self.conversations.readable_scope(actor, collection_ids, file_ids)
+        if model:
+            conversation.model = model
 
         message = await self.conversations.stage_message(
             conversation, MessageRole.USER, content, collections=collections, files=files
         )
-        run = await self.runs.add(Run(conversation_id=conversation.id, message_id=message.id))
+        run = await self.runs.add(
+            Run(
+                conversation_id=conversation.id,
+                message_id=message.id,
+                model=conversation.model or default_model,
+            )
+        )
         await self.session.commit()
         await self.session.refresh(conversation)
 
@@ -105,6 +118,7 @@ class RunService:
             run_id=run.id,
             conversation_id=run.conversation_id,
             user_id=conversation.user_id,
+            model=run.model,
             messages=[{"role": m.role.value, "content": m.content} for m in history if m.content],
             collection_ids=[c.id for c in trigger.collections],
             file_ids=[f.id for f in trigger.files],

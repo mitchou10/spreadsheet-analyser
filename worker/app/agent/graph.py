@@ -24,7 +24,7 @@ def _text(message: BaseMessage) -> str:
     content = message.content
     if isinstance(content, str):
         return content
-    # Content blocks (e.g. Anthropic): keep the text ones.
+    # Content blocks (some providers return a list): keep the text ones.
     return "".join(
         block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
     )

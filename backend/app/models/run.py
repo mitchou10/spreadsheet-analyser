@@ -35,6 +35,8 @@ class Run(Base):
     # The user message this run answers (and whose collection/file scope it works on).
     message_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"))
     status: Mapped[RunStatus] = mapped_column(pg_enum(RunStatus, "run_status"), default=RunStatus.QUEUED, index=True)
+    # LLM the worker must use for this run (resolved when the message is sent: the user's pick or the default).
+    model: Mapped[str | None] = mapped_column(String(255), default=None)
     # Celery task id, kept so a cancel can revoke the task if it has not started yet.
     task_id: Mapped[str | None] = mapped_column(String(255), default=None)
     # The assistant message produced by a COMPLETED run.

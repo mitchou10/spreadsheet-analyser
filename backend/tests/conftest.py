@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.config import DatabaseSettings
+from app.services.models import ModelInfo, ModelNotAvailableError, ModelProviderError
 
 
 class FakeStorage:
@@ -50,6 +51,30 @@ class FakeDispatcher:
 
     async def revoke(self, task_id: str) -> None:
         self.revoked.append(task_id)
+
+
+class FakeCatalog:
+    """Stand-in for ModelCatalog: a fixed list of models, or a provider outage (`down=True`)."""
+
+    default = "gpt-test"
+
+    def __init__(self) -> None:
+        self.models = [ModelInfo("gpt-test", "openai"), ModelInfo("other-model", "acme")]
+        self.down = False
+
+    async def list_models(self) -> list[ModelInfo]:
+        if self.down:
+            raise ModelProviderError("provider down")
+        return self.models
+
+    async def ensure_available(self, model_id: str) -> None:
+        if model_id not in {m.id for m in await self.list_models()}:
+            raise ModelNotAvailableError(f"Model '{model_id}' is not available")
+
+
+@pytest.fixture
+def catalog() -> FakeCatalog:
+    return FakeCatalog()
 
 
 @pytest.fixture

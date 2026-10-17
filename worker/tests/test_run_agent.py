@@ -42,7 +42,7 @@ def make_client(calls: list, *, history=HISTORY, start_status=200, complete_stat
         if path.endswith("/start"):
             return httpx.Response(start_status, json={"detail": "cancelled"})
         if path.endswith("/context"):
-            return httpx.Response(200, json={"run_id": "r1", "conversation_id": "c1"})
+            return httpx.Response(200, json={"run_id": "r1", "conversation_id": "c1", "model": "gpt-x"})
         if path.endswith("/conversations/c1/messages"):
             return httpx.Response(history_status, json=history)
         if path.endswith("/complete"):
@@ -126,12 +126,12 @@ def test_empty_model_answer_fails_the_run() -> None:
 
 
 def test_missing_api_key_fails_the_run_with_a_clear_error(monkeypatch) -> None:
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     calls: list = []
 
     assert run_agent("r1", make_client(calls)) == "failed"
 
-    assert "ANTHROPIC_API_KEY" in calls[-1][2]
+    assert "OPENAI_API_KEY" in calls[-1][2]
 
 
 def test_cancelled_before_start_is_skipped_without_doing_work() -> None:
@@ -149,3 +149,22 @@ def test_cancelled_while_running_discards_the_reply() -> None:
     assert run_agent("r1", make_client(calls, complete_status=409), FakeLLM("plan", "answer")) == "cancelled"
 
     assert not any(path.endswith("/fail") for _, path, *_ in calls)
+
+
+def test_the_model_picked_for_the_run_is_given_to_the_llm_builder(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    built: list = []
+
+    class Spy:
+        def __init__(self, **kwargs) -> None:
+            built.append(kwargs)
+
+        def invoke(self, messages):
+            return AIMessage(content="ok")
+
+    monkeypatch.setattr("app.agent.llm.ChatOpenAI", Spy)
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://gateway/v1")
+
+    assert run_agent("r1", make_client([])) == "completed"
+
+    assert built == [{"model": "gpt-x", "api_key": "sk-test", "base_url": "http://gateway/v1"}]

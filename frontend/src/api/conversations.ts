@@ -4,6 +4,7 @@ import type { Conversation, Message, Run, RunStatus } from '@/types/conversation
 interface ConversationDto {
   id: string
   title: string
+  model: string | null
 }
 
 interface MessageDto {
@@ -27,11 +28,14 @@ const toMessage = (dto: MessageDto): Message[] =>
     : []
 
 export const listConversations = async (): Promise<Conversation[]> =>
-  (await apiFetch<ConversationDto[]>('/conversations')).map(({ id, title }) => ({ id, title }))
+  (await apiFetch<ConversationDto[]>('/conversations')).map(({ id, title, model }) => ({ id, title, model }))
 
 export const createConversation = async (): Promise<Conversation> => {
-  const { id, title } = await apiFetch<ConversationDto>('/conversations', { method: 'POST', body: jsonBody({}) })
-  return { id, title }
+  const { id, title, model } = await apiFetch<ConversationDto>('/conversations', {
+    method: 'POST',
+    body: jsonBody({}),
+  })
+  return { id, title, model }
 }
 
 export const deleteConversation = (id: string) => apiFetch<void>(`/conversations/${id}`, { method: 'DELETE' })
@@ -40,10 +44,10 @@ export const listMessages = async (conversationId: string): Promise<Message[]> =
   (await apiFetch<MessageDto[]>(`/conversations/${conversationId}/messages`)).flatMap(toMessage)
 
 /** Stores the user message and queues the assistant's run; the answer arrives later (poll the run). */
-export async function sendMessage(conversationId: string, content: string): Promise<{ messages: Message[]; run: Run }> {
+export async function sendMessage(conversationId: string, content: string, model?: string): Promise<{ messages: Message[]; run: Run }> {
   const sent = await apiFetch<{ message: MessageDto; run: RunDto }>(`/conversations/${conversationId}/messages`, {
     method: 'POST',
-    body: jsonBody({ content }),
+    body: jsonBody({ content, model: model ?? null }),
   })
   return { messages: toMessage(sent.message), run: toRun(sent.run) }
 }

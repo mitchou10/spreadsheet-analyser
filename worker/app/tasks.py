@@ -21,9 +21,9 @@ def run_agent(run_id: str, client: BackendClient | None = None, llm=None) -> str
         return "skipped"
 
     try:
-        conversation_id = client.context(run_id)["conversation_id"]
-        graph = build_graph(llm or build_llm(), client)
-        result = graph.invoke({"conversation_id": conversation_id})
+        context = client.context(run_id)
+        graph = build_graph(llm or build_llm(context.get("model")), client)
+        result = graph.invoke({"conversation_id": context["conversation_id"]})
         client.complete(run_id, result["answer"])
     except RunConflict:
         logger.info("Run %s was cancelled while running, discarding the reply", run_id)

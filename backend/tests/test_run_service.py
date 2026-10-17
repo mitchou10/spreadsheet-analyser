@@ -141,3 +141,19 @@ async def test_runs_are_private_to_the_conversation_owner(setup) -> None:
         await service.get_active(BOB, conversation.id)
     with pytest.raises(NotFoundError):
         await service.send_message(BOB, conversation.id, "hijack")
+
+
+async def test_run_model_resolution_order(setup) -> None:
+    service, conversation = setup
+
+    _, default_run = await service.send_message(ALICE, conversation.id, "a", default_model="default-model")
+    assert default_run.model == "default-model"
+    await service.cancel(ALICE, default_run.id)
+
+    _, picked = await service.send_message(ALICE, conversation.id, "b", model="picked", default_model="default-model")
+    assert picked.model == "picked"
+    await service.cancel(ALICE, picked.id)
+
+    _, sticky = await service.send_message(ALICE, conversation.id, "c", default_model="default-model")
+    assert sticky.model == "picked"  # the conversation remembers the last pick
+    assert (await ConversationService(setup[0].session).get(ALICE, conversation.id)).model == "picked"

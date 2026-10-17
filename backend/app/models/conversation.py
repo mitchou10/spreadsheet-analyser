@@ -33,6 +33,9 @@ class Conversation(Base):
     status: Mapped[ConversationStatus] = mapped_column(
         pg_enum(ConversationStatus, "conversation_status"), default=ConversationStatus.ACTIVE
     )
+    # LLM chosen for this conversation (an id from GET /models); None = the default model.
+    # Every run of the conversation is executed by the worker with it.
+    model: Mapped[str | None] = mapped_column(String(255), default=None)
     # Keycloak user_id (sub claim) of the owner - no local users table, see app/core/security.
     user_id: Mapped[str] = mapped_column(String(255), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

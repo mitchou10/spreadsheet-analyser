@@ -97,6 +97,18 @@ def main() -> int:
         health = client.get(f"{api}/health")
         check("health", health.status_code == 200, health.text)
 
+        models = client.get(f"{api}/models")
+        # 200 with a configured provider; 502 (clean error) when OPENAI_API_KEY is not set.
+        check(
+            "GET /models answers (list or clean provider error)",
+            models.status_code == 200
+            and "default" in models.json()
+            or models.status_code == 502
+            and "OPENAI_API_KEY" in models.text,
+            models.text,
+        )
+        check("GET /models requires login", httpx.get(f"{api}/models").status_code == 401)
+
         # --- Collections + upload ---
         collection = client.post(f"{api}/collections", json={"name": "E2E", "description": "smoke"}).json()
         cid = collection["id"]
@@ -144,12 +156,12 @@ def main() -> int:
             if run["status"] not in ("queued", "running"):
                 break
             time.sleep(0.5)
-        # Needs ANTHROPIC_API_KEY on the worker for a real answer; without it the run must fail cleanly (never hang).
+        # Needs OPENAI_API_KEY on the worker for a real answer; without it the run must fail cleanly (never hang).
         answered = run["status"] == "completed"
-        no_key = run["status"] == "failed" and "ANTHROPIC_API_KEY" in (run["error"] or "")
+        no_key = run["status"] == "failed" and "OPENAI_API_KEY" in (run["error"] or "")
         check("agent run finishes (completed, or failed cleanly without an LLM key)", answered or no_key, run)
         if no_key:
-            print("      (no ANTHROPIC_API_KEY on the worker: reply checks skipped)")
+            print("      (no OPENAI_API_KEY on the worker: reply checks skipped)")
         messages = client.get(f"{api}/conversations/{conversation['id']}/messages").json()
         check("message persisted with its scope", messages[0]["file_ids"] == [file_id], messages)
         if answered:
