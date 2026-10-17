@@ -121,6 +121,52 @@ index_worker:
     limits:
       memory: "1Gi"
 
+# Runs the SQL the agent writes over the real rows of the files (DuckDB, sandboxed). Same image as `analysis_worker`
+# (the Parquet copies of the sheets are written by the analysis), own queue and own pods: a person waiting for an
+# answer never queues behind the analysis of a large file. It never needs the LLM key.
+query_worker:
+  command:
+    - "celery"
+    - "-A"
+    - "app.celery_app"
+    - "worker"
+    - "--loglevel=info"
+    - "-Q"
+    - "query"
+    - "--concurrency=2"
+    # A child that grows past ~1.2 GB is recycled after its task (the query itself is capped by QUERY_MEMORY_LIMIT).
+    - "--max-memory-per-child=1200000"
+  envFrom:
+    - secretRef:
+        name: "spreadsheet-analyser-s3"
+    - secretRef:
+        name: "spreadsheet-analyser-internal"
+    - secretRef:
+        name: "spreadsheet-analyser-redis"
+  env:
+    BACKEND_URL: "http://spreadsheet-analyser-backend"
+    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_S3_BUCKET: "spreadsheet-analyser"
+    AWS_REGION: "us-east-1"
+    # Per query: memory DuckDB may use before spilling to disk, time allowed, rows given back.
+    QUERY_MEMORY_LIMIT: "512MB"
+    QUERY_TIMEOUT_SECONDS: "30"
+    QUERY_MAX_ROWS: "200"
+  # CPU is what this worker is for: let a query use two cores (DuckDB runs QUERY_THREADS threads, 2 by default).
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+  # The Parquet files of a query are downloaded to /tmp (the root filesystem is read-only) and DuckDB spills there
+  # when a query does not fit in memory: cap that scratch space.
+  volumes:
+    - name: "tmp"
+      emptyDir:
+        sizeLimit: "4Gi"
+
 jobs:
   # Applies the database migrations. A post-install/post-upgrade hook, so the Secrets created by the Vault
   # Secrets Operator already exist when it runs (a pre-install hook would run before them).
