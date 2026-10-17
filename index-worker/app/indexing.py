@@ -20,7 +20,14 @@ from contextlib import AbstractContextManager
 import redis
 
 from app.search.docs import build_file_docs, sheet_summary
-from app.search.index_file import IndexedFile, IndexFormatError, SearchIndex, index_key, user_index_key
+from app.search.index_file import (
+    IndexedFile,
+    IndexFormatError,
+    SearchIndex,
+    index_key,
+    user_digest,
+    user_index_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +44,7 @@ def collection_lock_name(collection_id: str) -> str:
 
 
 def user_lock_name(email: str) -> str:
-    return "user-index:" + user_index_key(email).split("/")[1]
+    return "user-index:" + user_digest(email)
 
 
 class RedisLocks:

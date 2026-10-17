@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import io
 import json
+import os
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -18,15 +19,31 @@ from app.search.text import TOKENIZER_VERSION
 SCHEMA_VERSION = 1
 
 
+DEFAULT_KEY_PREFIX = "spreadsheet-analyser"
+
+
+def key_prefix() -> str:
+    """The project level that starts every S3 key (`S3_KEY_PREFIX`, the same value as in the backend; empty = none)."""
+    return os.environ.get("S3_KEY_PREFIX", DEFAULT_KEY_PREFIX).strip("/")
+
+
+def _join(*parts: str) -> str:
+    return "/".join(part for part in parts if part)
+
+
 def index_key(collection_id: str) -> str:
-    return f"{collection_id}/search-index.json.gz"
+    return _join(key_prefix(), collection_id, "search-index.json.gz")
+
+
+def user_digest(email: str) -> str:
+    """A hash of the (normalised) email: safe in an object name or a lock name, and nobody's address ends up in a
+    listing of the bucket."""
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()
 
 
 def user_index_key(email: str) -> str:
-    """The index of everything a person can read, across collections. Keyed by a hash of the (normalised) email:
-    safe in an object name, and nobody's address ends up in a listing of the bucket."""
-    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
-    return f"users/{digest}/search-index.json.gz"
+    """The index of everything a person can read, across collections."""
+    return _join(key_prefix(), "users", user_digest(email), "search-index.json.gz")
 
 
 class IndexFormatError(ValueError):

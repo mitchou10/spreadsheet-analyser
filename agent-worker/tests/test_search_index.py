@@ -5,7 +5,7 @@ import pytest
 
 from app.search.docs import FIELD_WEIGHTS, build_file_docs, column_values, sheet_summary
 from app.search.engine import Doc, Index
-from app.search.index_file import IndexedFile, IndexFormatError, SearchIndex, index_key
+from app.search.index_file import IndexedFile, IndexFormatError, SearchIndex, index_key, user_index_key
 from app.search.text import TOKENIZER_VERSION
 
 
@@ -158,8 +158,16 @@ def test_the_same_content_gives_the_same_bytes_apart_from_the_timestamp() -> Non
     assert a == b
 
 
-def test_index_key_lives_next_to_the_collection_files() -> None:
-    assert index_key("c1") == "c1/search-index.json.gz"
+def test_index_keys_start_with_the_project_level_and_follow_s3_key_prefix(monkeypatch) -> None:
+    assert index_key("c1") == "spreadsheet-analyser/c1/search-index.json.gz"
+    assert user_index_key("Marie@Example.fr ") == user_index_key("marie@example.fr")
+    assert user_index_key("marie@example.fr").startswith("spreadsheet-analyser/users/")
+    assert "marie" not in user_index_key("marie@example.fr")
+
+    monkeypatch.setenv("S3_KEY_PREFIX", "/other/")
+    assert index_key("c1") == "other/c1/search-index.json.gz"
+    monkeypatch.setenv("S3_KEY_PREFIX", "")
+    assert index_key("c1") == "c1/search-index.json.gz" and user_index_key("m@x.fr").startswith("users/")
 
 
 # --- an unusable saved index is refused, never half-used ---

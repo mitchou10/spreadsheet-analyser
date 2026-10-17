@@ -91,8 +91,8 @@ class Storage:
         self.unlocked: list[str] = []
 
     def _guard(self, key: str) -> None:
-        owner = key.split("/")[0]
-        needed = user_lock_name_for(key) if owner == "users" else collection_lock_name(owner)
+        parts = key.split("/")  # <project>/<collection id>/... or <project>/users/<digest>/...
+        needed = f"user-index:{parts[2]}" if parts[1] == "users" else collection_lock_name(parts[1])
         if needed not in self.locks.held:
             self.unlocked.append(key)
 
@@ -112,10 +112,6 @@ class Storage:
     def delete(self, key):
         self._guard(key)
         self.blobs.pop(key, None)
-
-
-def user_lock_name_for(key: str) -> str:
-    return "user-index:" + key.split("/")[1]
 
 
 class Client:
@@ -384,7 +380,8 @@ def test_user_emails_are_normalised(world) -> None:
 def test_the_user_index_key_hides_the_address() -> None:
     key = user_index_key("marie@example.fr")
 
-    assert key.startswith("users/") and key.endswith("/search-index.json.gz") and "marie" not in key
+    assert key.startswith("spreadsheet-analyser/users/") and key.endswith("/search-index.json.gz")
+    assert "marie" not in key
 
 
 # --- fan-out to the readers of a collection ---
@@ -491,3 +488,29 @@ def test_the_debouncer_claims_once_per_window_and_normalises_emails() -> None:
     assert (
         list(store) == ["index:user-scheduled:marie@example.fr"] and store["index:user-scheduled:marie@example.fr"] > 15
     )
+
+
+def test_every_index_key_starts_with_the_project_level() -> None:
+    assert index_key("c1") == "spreadsheet-analyser/c1/search-index.json.gz"
+    assert user_index_key(USER).startswith("spreadsheet-analyser/users/")
+
+
+def test_the_project_level_follows_s3_key_prefix_and_can_be_empty(monkeypatch) -> None:
+    monkeypatch.setenv("S3_KEY_PREFIX", "/other/")
+    assert index_key("c1") == "other/c1/search-index.json.gz" and user_index_key(USER).startswith("other/users/")
+
+    monkeypatch.setenv("S3_KEY_PREFIX", "")
+    assert index_key("c1") == "c1/search-index.json.gz" and user_index_key(USER).startswith("users/")
+
+
+def test_a_collection_index_is_written_under_the_project_level(world) -> None:
+    world.indexer.file_analysed(world.analysed(COLLECTION, "v", "ventes.csv"))
+
+    assert list(world.storage.blobs) == [f"spreadsheet-analyser/{COLLECTION}/search-index.json.gz"]
+
+
+def test_the_user_lock_name_does_not_depend_on_the_key_layout(monkeypatch) -> None:
+    before = user_lock_name(USER)
+    monkeypatch.setenv("S3_KEY_PREFIX", "a/b/c")
+
+    assert user_lock_name(USER) == before == "user-index:" + user_index_key(USER).split("/")[-2]
