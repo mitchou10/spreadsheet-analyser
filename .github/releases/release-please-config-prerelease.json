@@ -42,6 +42,16 @@
           "type": "toml",
           "path": "analysis-worker/uv.lock",
           "jsonpath": "$.package[?(@.name.value=='analysis-worker')].version"
+        },
+        {
+          "type": "toml",
+          "path": "index-worker/pyproject.toml",
+          "jsonpath": "project.version"
+        },
+        {
+          "type": "toml",
+          "path": "index-worker/uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='index-worker')].version"
         }
       ],
       "changelog-sections": [

@@ -122,6 +122,9 @@ jobs:
                     - name: analysis-worker
                       context: analysis-worker
                       dockerfile: analysis-worker/Dockerfile
+                    - name: index-worker
+                      context: index-worker
+                      dockerfile: index-worker/Dockerfile
         with:
             IMAGE_NAME: ${{ needs.expose-vars.outputs.IMAGE_BASE }}/${{ matrix.service.name }}
             IMAGE_TAG: ${{ needs.release.outputs.version }}

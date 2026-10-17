@@ -37,6 +37,7 @@ jobs:
             backend: ${{ steps.filter.outputs.backend }}
             agent-worker: ${{ steps.filter.outputs.agent-worker }}
             analysis-worker: ${{ steps.filter.outputs.analysis-worker }}
+            index-worker: ${{ steps.filter.outputs.index-worker }}
             helm: ${{ steps.filter.outputs.helm }}
             ci: ${{ steps.filter.outputs.ci }}
             services: ${{ steps.services.outputs.services }}
@@ -57,6 +58,8 @@ jobs:
                         - 'agent-worker/**'
                       analysis-worker:
                         - 'analysis-worker/**'
+                      index-worker:
+                        - 'index-worker/**'
                       helm:
                         - 'helm/**'
                         - 'ci/configs/ct.yaml'
@@ -70,6 +73,7 @@ jobs:
                   BACKEND: ${{ steps.filter.outputs.backend }}
                   AGENT_WORKER: ${{ steps.filter.outputs.agent-worker }}
                   ANALYSIS_WORKER: ${{ steps.filter.outputs.analysis-worker }}
+                  INDEX_WORKER: ${{ steps.filter.outputs.index-worker }}
                   CI: ${{ steps.filter.outputs.ci }}
               run: |
                   set -euo pipefail
@@ -88,6 +92,9 @@ jobs:
                   fi
                   if [ "$ANALYSIS_WORKER" = "true" ] || [ "$CI" = "true" ]; then
                     add '{"name":"analysis-worker","context":"analysis-worker","dockerfile":"analysis-worker/Dockerfile","target":"runtime"}'
+                  fi
+                  if [ "$INDEX_WORKER" = "true" ] || [ "$CI" = "true" ]; then
+                    add '{"name":"index-worker","context":"index-worker","dockerfile":"index-worker/Dockerfile","target":"runtime"}'
                   fi
 
                   echo "Images to build: $SERVICES"
@@ -139,7 +146,7 @@ jobs:
         uses: ./.github/workflows/lint.yml
         needs:
             - path-filter
-        if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
+        if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.index-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
         permissions:
             contents: read
 
@@ -147,7 +154,7 @@ jobs:
         uses: ./.github/workflows/unit-tests.yml
         needs:
             - path-filter
-        if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
+        if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.index-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
         permissions:
             contents: read
 
