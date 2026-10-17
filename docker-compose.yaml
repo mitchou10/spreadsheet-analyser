@@ -121,6 +121,40 @@ services:
       rustfs:
         condition: service_started
 
+  # Runs the SQL the agent writes over the real rows of the files (DuckDB, sandboxed). Same image as analysis-worker,
+  # own queue (query) and own process: a question never waits behind the analysis of a large file.
+  query-worker:
+    build:
+      context: analysis-worker
+      target: runtime
+    command:
+      - celery
+      - -A
+      - app.celery_app
+      - worker
+      - --loglevel=info
+      - -Q
+      - query
+      - --concurrency=2
+      - --max-memory-per-child=1200000
+    mem_limit: 2g
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: dev-only-internal-token
+      AWS_ACCESS_KEY_ID: rustfsadmin
+      AWS_SECRET_ACCESS_KEY: rustfsadmin
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL_S3: http://rustfs:9000
+      AWS_S3_BUCKET: spreadsheet-analyser
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
   # Keeps the BM25 search indexes (of each collection and of each person) up to date in S3. Own image, own queue (index).
   index-worker:
     build:

@@ -5,7 +5,7 @@ Release "{{ .Release.Name }}" has been deployed in namespace "{{ .Release.Namesp
 
 NOTE: `enabled` is false, so this release intentionally contains no resource.
 {{- else }}
-{{- range $componentName := list "backend" "frontend" "agent_worker" "analysis_worker" "index_worker" }}
+{{- range $componentName := list "backend" "frontend" "agent_worker" "analysis_worker" "index_worker" "query_worker" }}
 {{- $component := index $.Values $componentName }}
 {{- $fullname := include "helper.componentFullname" (dict "root" $ "componentName" $componentName) }}
 

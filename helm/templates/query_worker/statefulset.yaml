@@ -1,0 +1,25 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.query_worker.deploymentType "StatefulSet" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "query_worker") }}
+  labels: {{- include "helper.labels" (dict "root" . "componentName" "query_worker") | nindent 4 }}
+spec:
+  {{- if not .Values.query_worker.autoscaling.enabled }}
+  replicas: {{ .Values.query_worker.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.query_worker.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "query_worker") | nindent 6 }}
+  serviceName: {{ include "helper.componentFullname" (dict "root" . "componentName" "query_worker") }}
+  {{- with .Values.query_worker.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "query_worker" "component" .Values.query_worker) | nindent 4 }}
+  {{- if or .Values.query_worker.volumeClaims .Values.query_worker.extraVolumeClaims }}
+  volumeClaimTemplates: {{- toYaml (concat (default (list) .Values.query_worker.volumeClaims) (default (list) .Values.query_worker.extraVolumeClaims)) | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}

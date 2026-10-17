@@ -5,7 +5,7 @@ arrivent dans les pods (Vault Secrets Operator, comme Muffin) et comment les ren
 réelle.
 
 Le chart est celui de Muffin (basé sur les charts de [this-is-tobi](https://github.com/this-is-tobi/helm-charts)) :
-chaque composant (`backend`, `frontend`, `agent_worker`, `analysis_worker`, `index_worker`) et chaque job (`jobs.migration`) charge
+chaque composant (`backend`, `frontend`, `agent_worker`, `analysis_worker`, `index_worker`, `query_worker`) et chaque job (`jobs.migration`) charge
 des `Secret` dans son environnement avec `envFrom`, et `extraObjects` déclare les `VaultStaticSecret` qui créent ces
 `Secret`. Tout est écrit dans [`values/common-values.yaml`](values/common-values.yaml), `values.yaml` ne contenant que
 les valeurs par défaut du chart.
@@ -54,11 +54,11 @@ un pod ne reçoit que les `Secret` qu'il liste dans `envFrom`.
 
 | Chemin Vault (exemple) | Clés à y écrire | `Secret` créé | Lu par |
 |---|---|---|---|
-| `spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker, index_worker |
+| `spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker, index_worker, query_worker |
 | `spreadsheet-analyser/keycloak` | `KEYCLOAK_CLIENT_SECRET` | `spreadsheet-analyser-keycloak` | backend |
 | `spreadsheet-analyser/openai` | `OPENAI_API_KEY` | `spreadsheet-analyser-openai` | backend, agent_worker |
-| `spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker |
-| `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker |
+| `spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker, query_worker |
+| `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker, query_worker |
 | `spreadsheet-analyser/db` | `username`, `password` | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) | backend, jobs.migration |
 
 Le point d'accès (`mount`), les chemins et le `vaultAuthRef` dépendent de votre plateforme : ils se règlent dans vos
@@ -87,7 +87,7 @@ openssl rand -hex 32 | vault kv put -mount=kv spreadsheet-analyser/internal INTE
 1. `extraObjects` déclare un `VaultStaticSecret` par `Secret` (`vaultAuthRef`, `mount`, `type: kv-v2`, `path`).
 2. Vault Secrets Operator lit le chemin Vault et crée le `Secret` Kubernetes (`destination.create: true`).
 3. Les conteneurs le chargent par `envFrom` (`backend.envFrom`, `agent_worker.envFrom`, `analysis_worker.envFrom`,
-   `index_worker.envFrom`, `jobs.migration.envFrom`). Pour une variable définie dans
+   `index_worker.envFrom`, `query_worker.envFrom`, `jobs.migration.envFrom`). Pour une variable définie dans
    plusieurs `Secret`, la **dernière** source gagne : placez les `Secret` calculés (`…-db`, `…-redis`) en dernier.
 4. `refreshAfter` fait relire Vault périodiquement, et `rolloutRestartTargets` redémarre automatiquement les
    `Deployment` listés quand une valeur change.
@@ -163,8 +163,8 @@ déconnexion de votre domaine.
 ## Ce que le chart déploie, et ce qui reste à votre charge
 
 Déployé : `frontend`, `backend`, `agent_worker` (file `agent`), `analysis_worker` (file `analysis`, 1 Gio de mémoire
-maximum), `index_worker` (file `index` : index de recherche des collections et des utilisateurs) et le job `migration` (`alembic upgrade head`, en hook `post-install` / `post-upgrade` pour que les `Secret`
-créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker`, `analysis-worker`, `index-worker`).
+maximum), `index_worker` (file `index` : index de recherche des collections et des utilisateurs), `query_worker` (file `query` : le SQL que l'agent écrit sur les vraies lignes des fichiers ; même image que `analysis_worker`, 2 Gio de mémoire maximum et 2 cœurs) et le job `migration` (`alembic upgrade head`, en hook `post-install` / `post-upgrade` pour que les `Secret`
+créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker`, `analysis-worker`, `index-worker`) ; `query_worker` réutilise celle d'`analysis-worker`.
 
 À votre charge, dans votre fichier de valeurs d'environnement :
 
