@@ -2,8 +2,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import type { Message } from '@/types/conversation'
 import { MessageBubble } from './MessageBubble'
 
-export function MessageList({ messages }: { messages: Message[] }) {
-  if (messages.length === 0) {
+export function MessageList({ messages, isAnswering }: { messages: Message[]; isAnswering: boolean }) {
+  if (messages.length === 0 && !isAnswering) {
     return (
       <div className="flex flex-1 items-center justify-center text-muted-foreground">
         <p>Posez une question sur votre fichier pour démarrer la conversation.</p>
@@ -17,6 +17,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+        {isAnswering && <p className="animate-pulse text-sm text-muted-foreground">L'assistant réfléchit…</p>}
       </div>
     </ScrollArea>
   )

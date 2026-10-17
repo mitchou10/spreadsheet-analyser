@@ -33,6 +33,8 @@ services:
       AWS_REGION: us-east-1
       AWS_ENDPOINT_URL_S3: http://rustfs:9000
       AWS_S3_BUCKET: spreadsheet-analyser
+      # Shared with the worker: authenticates its calls to /api/internal/*. Dev value only.
+      INTERNAL_API_TOKEN: dev-only-internal-token
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8080
       KEYCLOAK_REALM: spreadsheet-analyser
@@ -68,8 +70,12 @@ services:
       target: runtime
     environment:
       REDIS_URL: redis://redis:6379/0
+      BACKEND_URL: http://backend:8000
+      INTERNAL_API_TOKEN: dev-only-internal-token
     depends_on:
       redis:
+        condition: service_healthy
+      backend:
         condition: service_healthy
 
   postgres:

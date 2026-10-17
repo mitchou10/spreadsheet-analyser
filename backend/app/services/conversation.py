@@ -75,8 +75,31 @@ class ConversationService:
     ) -> Message:
         """`collection_ids` / `file_ids` optionally restrict what this message is about."""
         conversation = await self.get(actor, conversation_id)
-        collections = await self._readable_collections(actor, collection_ids)
-        files = await self._readable_files(actor, file_ids)
+        message = await self.stage_message(
+            conversation,
+            role,
+            content,
+            tool_calls=tool_calls,
+            tool_call_id=tool_call_id,
+            collections=await self._readable_collections(actor, collection_ids),
+            files=await self._readable_files(actor, file_ids),
+        )
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        return message
+
+    async def stage_message(
+        self,
+        conversation: Conversation,
+        role: MessageRole,
+        content: str | None,
+        tool_calls: list[dict] | None = None,
+        tool_call_id: str | None = None,
+        collections: list[Collection] | None = None,
+        files: list[File] | None = None,
+    ) -> Message:
+        """Adds the message to the open transaction without committing, so callers can make it atomic
+        with other writes (e.g. the run it triggers). No access check: callers already did theirs."""
         message = await self.messages.add(
             Message(
                 conversation_id=conversation.id,
@@ -84,8 +107,8 @@ class ConversationService:
                 content=content,
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
-                collections=collections,
-                files=files,
+                collections=collections or [],
+                files=files or [],
             )
         )
         # The first user message names the conversation, like in any chat UI.
@@ -93,9 +116,12 @@ class ConversationService:
             conversation.title = " ".join(content.split())[:TITLE_MAX_LENGTH]
         # Bump updated_at so the conversation list sorts by latest activity.
         conversation.updated_at = func.now()
-        await self.session.commit()
-        await self.session.refresh(conversation)
         return message
+
+    async def readable_scope(
+        self, actor: Actor, collection_ids: Sequence[uuid.UUID], file_ids: Sequence[uuid.UUID]
+    ) -> tuple[list[Collection], list[File]]:
+        return await self._readable_collections(actor, collection_ids), await self._readable_files(actor, file_ids)
 
     async def _readable_collections(self, actor: Actor, ids: Sequence[uuid.UUID]) -> list[Collection]:
         """Collections the caller owns or that were shared with them."""

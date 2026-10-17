@@ -81,7 +81,13 @@ export function AppShell() {
                 activeId && !chat.isLoading && !activeConversation ? (
                   <Navigate to="/chat" replace />
                 ) : (
-                  <ChatView title={activeConversation?.title ?? null} messages={chat.messages} onSend={handleSend} />
+                  <ChatView
+                    title={activeConversation?.title ?? null}
+                    messages={chat.messages}
+                    isAnswering={chat.isAnswering}
+                    onSend={handleSend}
+                    onCancel={chat.cancel}
+                  />
                 )
               }
             />

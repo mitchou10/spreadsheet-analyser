@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -31,6 +32,29 @@ class FakeStorage:
     async def delete_prefix(self, prefix: str) -> None:
         for key in [key for key in self.objects if key.startswith(prefix)]:
             del self.objects[key]
+
+
+class FakeDispatcher:
+    """Records what would be sent to the worker; `fail=True` simulates an unreachable broker."""
+
+    def __init__(self) -> None:
+        self.enqueued: list[uuid.UUID] = []
+        self.revoked: list[str] = []
+        self.fail = False
+
+    async def enqueue(self, run_id: uuid.UUID) -> str:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.enqueued.append(run_id)
+        return f"task-{run_id}"
+
+    async def revoke(self, task_id: str) -> None:
+        self.revoked.append(task_id)
+
+
+@pytest.fixture
+def dispatcher() -> FakeDispatcher:
+    return FakeDispatcher()
 
 
 @pytest.fixture
