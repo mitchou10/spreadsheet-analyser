@@ -1,5 +1,5 @@
 import { apiFetch, jsonBody } from '@/lib/api'
-import type { CollectionSummary, FileAnalysisStatus, SpreadsheetFile } from '@/types/collection'
+import type { AnalysisReport, CollectionSummary, FileAnalysisStatus, SpreadsheetFile } from '@/types/collection'
 
 interface CollectionDto {
   id: string
@@ -62,3 +62,53 @@ export const retryAnalysis = async (fileId: string) =>
 
 export const stopAnalysis = async (fileId: string) =>
   toFile(await apiFetch<FileDto>(`/files/${fileId}/analysis/stop`, { method: 'POST' }))
+
+interface AnalysisDto {
+  status: FileAnalysisStatus
+  error: string | null
+  result: {
+    warnings: string[]
+    sheets: {
+      name: string
+      rows: number
+      hidden: boolean
+      truncated: boolean
+      warnings: string[]
+      columns: {
+        name: string
+        type: string
+        non_null: number
+        null: number
+        distinct: number
+        distinct_exact: boolean
+        numeric?: { min: number | null; max: number | null; mean: number | null }
+      }[]
+    }[]
+  } | null
+}
+
+/** Latest analysis of the file's current version; `sheets` is empty until it is ready. */
+export async function getAnalysis(fileId: string): Promise<AnalysisReport> {
+  const dto = await apiFetch<AnalysisDto>(`/files/${fileId}/analysis`)
+  return {
+    status: dto.status,
+    error: dto.error,
+    warnings: dto.result?.warnings ?? [],
+    sheets: (dto.result?.sheets ?? []).map((sheet) => ({
+      name: sheet.name,
+      rows: sheet.rows,
+      hidden: sheet.hidden,
+      truncated: sheet.truncated,
+      warnings: sheet.warnings,
+      columns: sheet.columns.map((column) => ({
+        name: column.name,
+        type: column.type,
+        nonNull: column.non_null,
+        nulls: column.null,
+        distinct: column.distinct,
+        distinctExact: column.distinct_exact,
+        numeric: column.numeric ?? null,
+      })),
+    })),
+  }
+}

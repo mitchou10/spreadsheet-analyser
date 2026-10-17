@@ -6,9 +6,15 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ACTIVE_RUN_STATUSES, Message, MessageRole, Run, RunStatus
-from app.repositories import MessageRepository, RunRepository
-from app.services.actor import Actor
+from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, Message, MessageRole, Run, RunStatus
+from app.repositories import (
+    AnalysisRepository,
+    CollectionRepository,
+    FileRepository,
+    MessageRepository,
+    RunRepository,
+)
+from app.services.actor import Actor, normalize_email
 from app.services.conversation import ConversationService
 from app.services.dispatcher import RunDispatcher
 from app.services.errors import ConflictError, NotFoundError
@@ -29,12 +35,35 @@ class RunContext:
     file_ids: list[uuid.UUID]
 
 
+# The agent indexes the analyses of every file in scope: keep that bounded.
+MAX_SCOPE_FILES = 200
+
+
+@dataclass
+class ScopeFile:
+    """A file the agent may look at, with the state of its latest analysis."""
+
+    file_id: uuid.UUID
+    file_name: str
+    collection_id: uuid.UUID
+    collection_name: str
+    version: int
+    size_bytes: int
+    analysis_id: uuid.UUID | None
+    analysis_status: AnalysisStatus | None
+    # Where analyse.json is, only once the analysis is READY.
+    result_key: str | None
+
+
 class RunService:
     def __init__(self, session: AsyncSession, dispatcher: RunDispatcher) -> None:
         self.session = session
         self.dispatcher = dispatcher
         self.runs = RunRepository(session)
         self.messages = MessageRepository(session)
+        self.collections = CollectionRepository(session)
+        self.files = FileRepository(session)
+        self.analyses = AnalysisRepository(session)
         self.conversations = ConversationService(session)
 
     # --- User side ---
@@ -67,6 +96,7 @@ class RunService:
                 conversation_id=conversation.id,
                 message_id=message.id,
                 model=conversation.model or default_model,
+                requester_email=normalize_email(actor.email) or None,
             )
         )
         await self.session.commit()
@@ -123,6 +153,49 @@ class RunService:
             collection_ids=[c.id for c in trigger.collections],
             file_ids=[f.id for f in trigger.files],
         )
+
+    async def scope_files(self, run_id: uuid.UUID) -> list[ScopeFile]:
+        """The files the agent can search, with their latest analysis.
+
+        What the user attached to the message wins (explicit files, plus every file of explicit collections);
+        with no attachment, everything the requester can read (their collections and the ones shared with
+        their email)."""
+        run = await self._require(run_id)
+        conversation = await self.conversations.conversations.get(run.conversation_id)
+        trigger = await self.messages.get(run.message_id)
+
+        files = {file.id: file for file in trigger.files}
+        collection_ids = [collection.id for collection in trigger.collections]
+        if not collection_ids and not files:
+            readable = await self.collections.list_accessible(
+                conversation.user_id, normalize_email(run.requester_email or "")
+            )
+            collection_ids = [collection.id for collection in readable]
+        for collection_id in collection_ids:
+            for file in await self.files.list_by_collection(collection_id):
+                files.setdefault(file.id, file)
+        selected = list(files.values())[:MAX_SCOPE_FILES]
+
+        collection_names: dict[uuid.UUID, str] = {}
+        for file in selected:
+            if file.collection_id not in collection_names:
+                collection = await self.collections.get(file.collection_id)
+                collection_names[file.collection_id] = collection.name if collection else ""
+        latest = await self.analyses.latest_by_files([file.id for file in selected])
+        return [
+            ScopeFile(
+                file_id=file.id,
+                file_name=file.name,
+                collection_id=file.collection_id,
+                collection_name=collection_names[file.collection_id],
+                version=file.version,
+                size_bytes=file.size_bytes,
+                analysis_id=(analysis := latest.get(file.id)) and analysis.id,
+                analysis_status=analysis.status if analysis else None,
+                result_key=analysis.s3_key if analysis and analysis.status == AnalysisStatus.READY else None,
+            )
+            for file in selected
+        ]
 
     async def start(self, run_id: uuid.UUID) -> Run:
         run = await self._require(run_id)

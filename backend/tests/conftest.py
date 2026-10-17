@@ -40,6 +40,7 @@ class FakeDispatcher:
 
     def __init__(self) -> None:
         self.enqueued: list[uuid.UUID] = []
+        self.analyses: list[uuid.UUID] = []
         self.revoked: list[str] = []
         self.fail = False
 
@@ -48,6 +49,12 @@ class FakeDispatcher:
             raise ConnectionError("broker down")
         self.enqueued.append(run_id)
         return f"task-{run_id}"
+
+    async def enqueue_analysis(self, analysis_id: uuid.UUID) -> str:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.analyses.append(analysis_id)
+        return f"analysis-task-{analysis_id}"
 
     async def revoke(self, task_id: str) -> None:
         self.revoked.append(task_id)

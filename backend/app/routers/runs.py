@@ -3,8 +3,25 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends
 
-from app.dependencies import ActorDep, ConversationServiceDep, RunServiceDep, require_internal_token
-from app.schemas import InternalMessageOut, RunCompleteIn, RunContextOut, RunFailIn, RunOut
+from app.dependencies import (
+    ActorDep,
+    AnalysisServiceDep,
+    ConversationServiceDep,
+    RunServiceDep,
+    require_internal_token,
+)
+from app.schemas import (
+    AnalysisCompleteIn,
+    AnalysisContextOut,
+    AnalysisFailIn,
+    AnalysisOut,
+    InternalMessageOut,
+    RunCompleteIn,
+    RunContextOut,
+    RunFailIn,
+    RunOut,
+    ScopeFileOut,
+)
 
 router = APIRouter(prefix="/runs", tags=["Runs"])
 internal_router = APIRouter(
@@ -28,6 +45,11 @@ async def cancel_run(run_id: uuid.UUID, actor: ActorDep, service: RunServiceDep)
 @internal_router.get("/runs/{run_id}/context", summary="Conversation history and scope the run works on")
 async def run_context(run_id: uuid.UUID, service: RunServiceDep) -> RunContextOut:
     return RunContextOut(**asdict(await service.context(run_id)))
+
+
+@internal_router.get("/runs/{run_id}/files", summary="Files the agent may search, with their latest analysis")
+async def run_files(run_id: uuid.UUID, service: RunServiceDep) -> list[ScopeFileOut]:
+    return [ScopeFileOut(**asdict(file)) for file in await service.scope_files(run_id)]
 
 
 @internal_router.post("/runs/{run_id}/start", summary="queued -> running (409 if cancelled meanwhile)")
@@ -61,3 +83,28 @@ async def conversation_history(conversation_id: uuid.UUID, service: Conversation
         )
         for m in await service.history(conversation_id)
     ]
+
+
+# --- Spreadsheet analysis worker ---
+
+
+@internal_router.get("/analyses/{analysis_id}/context", summary="Where to read the file and write analyse.json")
+async def analysis_context(analysis_id: uuid.UUID, service: AnalysisServiceDep) -> AnalysisContextOut:
+    return AnalysisContextOut(**asdict(await service.context(analysis_id)))
+
+
+@internal_router.post("/analyses/{analysis_id}/start", summary="pending -> processing (409 if stopped meanwhile)")
+async def start_analysis(analysis_id: uuid.UUID, service: AnalysisServiceDep) -> AnalysisOut:
+    return AnalysisOut.model_validate(await service.start(analysis_id))
+
+
+@internal_router.post("/analyses/{analysis_id}/complete", summary="analyse.json is written: processing -> ready")
+async def complete_analysis(
+    analysis_id: uuid.UUID, body: AnalysisCompleteIn, service: AnalysisServiceDep
+) -> AnalysisOut:
+    return AnalysisOut.model_validate(await service.complete(analysis_id, body.s3_key))
+
+
+@internal_router.post("/analyses/{analysis_id}/fail", summary="Mark the analysis failed")
+async def fail_analysis(analysis_id: uuid.UUID, body: AnalysisFailIn, service: AnalysisServiceDep) -> AnalysisOut:
+    return AnalysisOut.model_validate(await service.fail(analysis_id, body.error))

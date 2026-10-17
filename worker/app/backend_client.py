@@ -89,8 +89,28 @@ class BackendClient:
     def fail(self, run_id: str, error: str) -> dict:
         return self._request("POST", f"/runs/{run_id}/fail", {"error": error})
 
+    def run_files(self, run_id: str) -> list[dict]:
+        """Files the run's agent may look at, each with its latest analysis state and the S3 key of
+        analyse.json once ready: [{file_id, file_name, collection_name, version, analysis_status, result_key...}]"""
+        return self._request("GET", f"/runs/{run_id}/files")
+
     # --- Conversations ---
 
     def messages(self, conversation_id: str) -> list[dict]:
         """Full history, oldest first: [{id, role, content, collection_ids, file_ids, created_at}]."""
         return self._request("GET", f"/conversations/{conversation_id}/messages")
+
+    # --- Spreadsheet analyses ---
+
+    def analysis_context(self, analysis_id: str) -> dict:
+        """{analysis_id, file_id, file_name, file_version, content_type, size_bytes, source_key, result_key}"""
+        return self._request("GET", f"/analyses/{analysis_id}/context")
+
+    def analysis_start(self, analysis_id: str) -> dict:
+        return self._request("POST", f"/analyses/{analysis_id}/start")
+
+    def analysis_complete(self, analysis_id: str, s3_key: str) -> dict:
+        return self._request("POST", f"/analyses/{analysis_id}/complete", {"s3_key": s3_key})
+
+    def analysis_fail(self, analysis_id: str, error: str) -> dict:
+        return self._request("POST", f"/analyses/{analysis_id}/fail", {"error": error})

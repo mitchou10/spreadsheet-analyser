@@ -161,3 +161,52 @@ class ModelOut(BaseModel):
 class ModelsOut(BaseModel):
     default: str
     models: list[ModelOut]
+
+
+class AnalysisOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    file_id: uuid.UUID
+    file_version: int
+    status: AnalysisStatus
+    error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AnalysisResultOut(AnalysisOut):
+    # Content of analyse.json (sheets, columns, statistics...); null until the analysis is ready.
+    result: dict | None
+
+
+class AnalysisContextOut(BaseModel):
+    analysis_id: uuid.UUID
+    file_id: uuid.UUID
+    file_name: str
+    file_version: int
+    content_type: str | None
+    size_bytes: int
+    source_key: str
+    result_key: str
+
+
+class AnalysisCompleteIn(BaseModel):
+    s3_key: str
+
+
+class AnalysisFailIn(BaseModel):
+    error: str
+
+
+class ScopeFileOut(BaseModel):
+    file_id: uuid.UUID
+    file_name: str
+    collection_id: uuid.UUID
+    collection_name: str
+    version: int
+    size_bytes: int
+    analysis_id: uuid.UUID | None
+    analysis_status: AnalysisStatus | None
+    # S3 key of analyse.json, set once the analysis is ready.
+    result_key: str | None

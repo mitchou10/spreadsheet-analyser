@@ -1,4 +1,5 @@
 import uuid
+from types import SimpleNamespace
 
 import pytest
 
@@ -157,3 +158,73 @@ async def test_run_model_resolution_order(setup) -> None:
     _, sticky = await service.send_message(ALICE, conversation.id, "c", default_model="default-model")
     assert sticky.model == "picked"  # the conversation remembers the last pick
     assert (await ConversationService(setup[0].session).get(ALICE, conversation.id)).model == "picked"
+
+
+async def _ready_analysis(session, storage, actor, file):
+    from app.services import AnalysisService
+
+    analyses = AnalysisService(session, storage)
+    analysis = await analyses.create(actor, file.id)
+    await analyses.start(analysis.id)
+    context = await analyses.context(analysis.id)
+    await storage.put_json(context.result_key, {"sheets": []})
+    await analyses.complete(analysis.id, context.result_key)
+    return context.result_key
+
+
+@pytest.fixture
+async def library(session, storage):
+    """Alice owns two collections (a.csv with a ready analysis, b.csv unanalyzed, c.csv in the second);
+    Bob shares one of his own with Alice's email."""
+    from app.services import CollectionService, FileService
+
+    collections, files = CollectionService(session, storage), FileService(session, storage)
+    sales = await collections.create(ALICE, "Ventes")
+    hr = await collections.create(ALICE, "RH")
+    a = await files.upload(ALICE, sales.id, "a.csv", b"1")
+    b = await files.upload(ALICE, sales.id, "b.csv", b"2")
+    c = await files.upload(ALICE, hr.id, "c.csv", b"3")
+    key = await _ready_analysis(session, storage, ALICE, a)
+    bobs = await collections.create(BOB, "Chez Bob")
+    d = await files.upload(BOB, bobs.id, "d.csv", b"4")
+    await collections.share(BOB, bobs.id, ALICE.email)
+    return SimpleNamespace(sales=sales, hr=hr, bobs=bobs, a=a, b=b, c=c, d=d, key=key)
+
+
+async def test_scope_files_unscoped_covers_owned_and_shared_collections(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "où est le chiffre d'affaires ?")
+
+    scope = await service.scope_files(run.id)
+
+    assert {f.file_name for f in scope} == {"a.csv", "b.csv", "c.csv", "d.csv"}
+    by_name = {f.file_name: f for f in scope}
+    assert by_name["a.csv"].analysis_status == "ready" and by_name["a.csv"].result_key == library.key
+    assert by_name["a.csv"].collection_name == "Ventes"
+    assert by_name["b.csv"].analysis_status is None and by_name["b.csv"].result_key is None
+    assert by_name["d.csv"].collection_name == "Chez Bob"
+
+
+async def test_scope_files_follows_the_collections_attached_to_the_message(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "q", collection_ids=[library.hr.id])
+
+    assert [f.file_name for f in await service.scope_files(run.id)] == ["c.csv"]
+
+
+async def test_scope_files_with_explicit_files_does_not_widen_to_everything(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "q", file_ids=[library.b.id])
+
+    assert [f.file_name for f in await service.scope_files(run.id)] == ["b.csv"]
+
+
+async def test_scope_files_never_leaks_what_the_requester_cannot_read(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(BOB)
+    _, run = await service.send_message(BOB, conversation.id, "q")
+
+    assert {f.file_name for f in await service.scope_files(run.id)} == {"d.csv"}  # not Alice's files

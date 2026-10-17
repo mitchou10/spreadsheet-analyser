@@ -1,4 +1,6 @@
+import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,15 +8,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Analysis, AnalysisStatus
 from app.repositories import AnalysisRepository
 from app.services.actor import Actor
-from app.services.errors import NotFoundError
+from app.services.dispatcher import RunDispatcher
+from app.services.errors import ConflictError, NotFoundError
 from app.services.file import FileService
-from app.services.storage import StorageService, analysis_key
+from app.services.storage import StorageService, analysis_key, file_key
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class AnalysisContext:
+    """What the analysis worker needs: where to read the file and where to write analyse.json."""
+
+    analysis_id: uuid.UUID
+    file_id: uuid.UUID
+    file_name: str
+    file_version: int
+    content_type: str | None
+    size_bytes: int
+    source_key: str
+    result_key: str
 
 
 class AnalysisService:
-    def __init__(self, session: AsyncSession, storage: StorageService) -> None:
+    def __init__(self, session: AsyncSession, storage: StorageService, dispatcher: RunDispatcher | None = None) -> None:
         self.session = session
         self.storage = storage
+        # None (tests, scripts): analyses are only recorded, nothing is sent to the analysis worker.
+        self.dispatcher = dispatcher
         self.analyses = AnalysisRepository(session)
         self.files = FileService(session, storage)
 
@@ -23,7 +44,19 @@ class AnalysisService:
         file = await self.files.get_owned(actor, file_id)
         analysis = await self.analyses.add(Analysis(file_id=file.id, file_version=file.version))
         await self.session.commit()
+        await self._dispatch(analysis)
         return analysis
+
+    async def _dispatch(self, analysis: Analysis) -> None:
+        """After the commit, so the worker finds the row. An unreachable queue fails the analysis visibly
+        instead of leaving it pending forever."""
+        if self.dispatcher is None:
+            return
+        try:
+            await self.dispatcher.enqueue_analysis(analysis.id)
+        except Exception:
+            logger.exception("Could not enqueue analysis %s", analysis.id)
+            await self._set_status(analysis.id, AnalysisStatus.ERROR, error="The analysis worker is unreachable")
 
     async def ensure_current(self, actor: Actor, file_id: uuid.UUID) -> Analysis:
         """The analysis of the file's current version, queued if there is none yet (idempotent per version)."""
@@ -44,6 +77,20 @@ class AnalysisService:
             return await self._set_status(analysis.id, AnalysisStatus.STOPPED)
         return analysis
 
+    async def get_latest_for_file(self, actor: Actor, file_id: uuid.UUID) -> Analysis:
+        """The latest analysis of the file's current version (readable by anyone who can read the file)."""
+        file = await self.files.get(actor, file_id)
+        analysis = await self.analyses.get_latest(file.id, file.version)
+        if analysis is None:
+            raise NotFoundError(f"File {file_id} has no analysis")
+        return analysis
+
+    async def read_result(self, analysis: Analysis) -> Any | None:
+        """Content of analyse.json once the analysis is READY, else None."""
+        if analysis.status != AnalysisStatus.READY or analysis.s3_key is None:
+            return None
+        return await self.storage.get_json(analysis.s3_key)
+
     async def list_for_file(self, actor: Actor, file_id: uuid.UUID) -> list[Analysis]:
         await self.files.get(actor, file_id)
         return await self.analyses.list_by_file(file_id)
@@ -62,12 +109,48 @@ class AnalysisService:
             raise NotFoundError(f"Analysis {analysis_id} has no result yet (status: {analysis.status})")
         return await self.storage.get_json(analysis.s3_key)
 
-    # --- Lifecycle transitions, driven by the worker (no user check: it acts on behalf of the system). ---
+    # --- Worker side (trusted: authenticated by the internal token, not by a user) ---
 
-    async def mark_processing(self, analysis_id: uuid.UUID) -> Analysis:
+    async def context(self, analysis_id: uuid.UUID) -> AnalysisContext:
+        analysis = await self._require(analysis_id)
+        file = await self.files.files.get(analysis.file_id)
+        if file is None:
+            raise NotFoundError(f"File {analysis.file_id} not found")
+        # The analysis targets the version it was queued for, even if a newer one was uploaded since.
+        return AnalysisContext(
+            analysis_id=analysis.id,
+            file_id=file.id,
+            file_name=file.name,
+            file_version=analysis.file_version,
+            content_type=file.content_type,
+            size_bytes=file.size_bytes,
+            source_key=file_key(file.collection_id, file.id, analysis.file_version, file.name),
+            result_key=analysis_key(file.collection_id, file.id, analysis.file_version),
+        )
+
+    async def start(self, analysis_id: uuid.UUID) -> Analysis:
+        """pending -> processing; refused (409) if the user stopped it meanwhile."""
+        analysis = await self._require(analysis_id)
+        if analysis.status != AnalysisStatus.PENDING:
+            raise ConflictError(f"Analysis {analysis_id} is {analysis.status}, not pending")
         return await self._set_status(analysis_id, AnalysisStatus.PROCESSING)
 
-    async def mark_error(self, analysis_id: uuid.UUID, error: str) -> Analysis:
+    async def complete(self, analysis_id: uuid.UUID, s3_key: str) -> Analysis:
+        """processing -> ready once the worker has written analyse.json at the expected key."""
+        analysis = await self._require(analysis_id)
+        if analysis.status != AnalysisStatus.PROCESSING:
+            raise ConflictError(f"Analysis {analysis_id} is {analysis.status}, not processing")
+        context = await self.context(analysis_id)
+        if s3_key != context.result_key:
+            raise ConflictError(f"Unexpected result key {s3_key!r}")
+        analysis.s3_key = s3_key
+        analysis.error = None
+        return await self._set_status(analysis_id, AnalysisStatus.READY, keep_error=True)
+
+    async def fail(self, analysis_id: uuid.UUID, error: str) -> Analysis:
+        analysis = await self._require(analysis_id)
+        if analysis.status not in (AnalysisStatus.PENDING, AnalysisStatus.PROCESSING):
+            return analysis  # e.g. stopped by the user while the worker was failing: keep their decision
         return await self._set_status(analysis_id, AnalysisStatus.ERROR, error=error[:2048])
 
     async def stop(self, actor: Actor, analysis_id: uuid.UUID) -> Analysis:
@@ -75,31 +158,19 @@ class AnalysisService:
         await self.files.get_owned(actor, analysis.file_id)
         return await self._set_status(analysis_id, AnalysisStatus.STOPPED)
 
-    async def complete(self, analysis_id: uuid.UUID, result: Any) -> Analysis:
-        """Writes analyse.json next to the analysed file version and flags the analysis READY."""
-        analysis = await self._require(analysis_id)
-        file = await self.files.files.get(analysis.file_id)
-        if file is None:
-            raise NotFoundError(f"File {analysis.file_id} not found")
-        key = analysis_key(file.collection_id, file.id, analysis.file_version)
-        await self.storage.put_json(key, result)
-        analysis.s3_key = key
-        analysis.status = AnalysisStatus.READY
-        analysis.error = None
-        await self.session.commit()
-        await self.session.refresh(analysis)
-        return analysis
-
     async def _require(self, analysis_id: uuid.UUID) -> Analysis:
         analysis = await self.analyses.get(analysis_id)
         if analysis is None:
             raise NotFoundError(f"Analysis {analysis_id} not found")
         return analysis
 
-    async def _set_status(self, analysis_id: uuid.UUID, status: AnalysisStatus, error: str | None = None) -> Analysis:
+    async def _set_status(
+        self, analysis_id: uuid.UUID, status: AnalysisStatus, error: str | None = None, keep_error: bool = False
+    ) -> Analysis:
         analysis = await self._require(analysis_id)
         analysis.status = status
-        analysis.error = error
+        if not keep_error:
+            analysis.error = error
         await self.session.commit()
         await self.session.refresh(analysis)
         return analysis
