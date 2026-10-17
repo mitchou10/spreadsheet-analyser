@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 
@@ -25,3 +26,22 @@ class AnalysisStorage:
 
     def upload_json(self, key: str, payload: bytes) -> None:
         self._client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType="application/json")
+
+    def get_bytes(self, key: str) -> bytes | None:
+        """Reads an object, or None if it does not exist."""
+        try:
+            return self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+        except self._client.exceptions.NoSuchKey:
+            return None
+
+    def get_json(self, key: str):
+        data = self.get_bytes(key)
+        if data is None:
+            raise FileNotFoundError(key)
+        return json.loads(data)
+
+    def put_bytes(self, key: str, payload: bytes, content_type: str = "application/octet-stream") -> None:
+        self._client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType=content_type)
+
+    def delete(self, key: str) -> None:
+        self._client.delete_object(Bucket=self.bucket, Key=key)
