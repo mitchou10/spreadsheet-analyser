@@ -44,9 +44,14 @@ class ModelCatalog:
         # Single flight: concurrent requests on a cold cache wait for one probe round instead of starting many.
         self._lock = asyncio.Lock()
 
-    @property
-    def default(self) -> str:
-        return self._settings.LLM_DEFAULT_MODEL
+    async def resolve_default(self) -> str:
+        """The model to use when none is chosen: the first chat-capable model the provider offers ("" if none or
+        if the provider cannot be asked). There is no configured default to get wrong."""
+        try:
+            models = await self.list_models()
+        except ModelProviderError:
+            return ""
+        return models[0].id if models else ""
 
     def _openai(self) -> AsyncOpenAI:
         if self._client is None:

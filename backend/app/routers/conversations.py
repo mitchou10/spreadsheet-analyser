@@ -103,7 +103,7 @@ async def send_message(
         collection_ids=body.collection_ids,
         file_ids=body.file_ids,
         model=body.model,
-        default_model=catalog.default,
+        default_model=await catalog.resolve_default(),
     )
     return SendMessageOut(message=_message_out(message), run=RunOut.model_validate(run))
 
