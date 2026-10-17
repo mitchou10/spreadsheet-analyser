@@ -24,6 +24,8 @@ Les workers ne parlent ni entre eux ni à la base : tout passe par le backend av
    requête et renvoie un résultat borné (`completed`), ou une erreur avec la liste des tables utilisables (`failed`).
 4. L'agent interroge `GET /api/internal/queries/{id}` toutes les demi-secondes, jusqu'à 60 secondes.
 
+Le résultat d'une requête peut ensuite devenir un graphique (voir [charts.md](charts.md)).
+
 Le SQL et le résultat apparaissent dans le bloc « Sources et outils » sous la réponse : chaque chiffre se vérifie.
 
 ## Nommer les tables
