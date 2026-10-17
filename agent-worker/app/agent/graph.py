@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 MAX_HISTORY_MESSAGES = 40
 # Tool calls the agent may chain for one answer before it is told to conclude.
 MAX_TOOL_STEPS = 8
+# Each tool output kept in the trace shown to the user is cut here (the model itself still sees all of it).
+MAX_TRACE_OUTPUT_CHARS = 4000
 
 
 class AgentState(TypedDict, total=False):
@@ -27,6 +29,9 @@ class AgentState(TypedDict, total=False):
     scratch: Annotated[list[BaseMessage], operator.add]
     steps: int
     answer: str
+    # What the user can look at afterwards: the files in scope and every tool call with its (cut) output.
+    files: list[dict]
+    trace_steps: Annotated[list[dict], operator.add]
 
 
 def _text(message: BaseMessage) -> str:
@@ -79,9 +84,14 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
         return {"history": history}
 
     def load_catalog(state: AgentState) -> AgentState:
-        holder["catalog"] = Catalog.load(client.run_files(run_id), storage, user_email=user_email)
+        scope = client.run_files(run_id)
+        holder["catalog"] = Catalog.load(scope, storage, user_email=user_email)
         logger.info("Catalog: %d files in scope", len(holder["catalog"].entries))
-        return {"overview": holder["catalog"].overview()}
+        files = [
+            {"file_id": f["file_id"], "file_name": f["file_name"], "collection_name": f.get("collection_name") or ""}
+            for f in scope
+        ]
+        return {"overview": holder["catalog"].overview(), "files": files}
 
     def plan(state: AgentState) -> AgentState:
         history = state["history"]
@@ -107,7 +117,7 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
         return {"answer": text}
 
     def run_tools(state: AgentState) -> AgentState:
-        results = []
+        results, log = [], []
         for call in state["scratch"][-1].tool_calls:
             tool = tools_by_name.get(call["name"])
             if tool is None:
@@ -119,7 +129,11 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
                     output = f"Erreur : arguments invalides ({type(error).__name__}: {error})"
             logger.info("Tool %s(%s) -> %d chars", call["name"], call["args"], len(output))
             results.append(ToolMessage(content=output, tool_call_id=call["id"], name=call["name"]))
-        return {"scratch": results}
+            shown = (
+                output if len(output) <= MAX_TRACE_OUTPUT_CHARS else output[:MAX_TRACE_OUTPUT_CHARS] + "\n… (tronqué)"
+            )
+            log.append({"tool": call["name"], "arguments": call["args"], "output": shown})
+        return {"scratch": results, "trace_steps": log}
 
     graph = StateGraph(AgentState)
     graph.add_node("load_history", load_history)

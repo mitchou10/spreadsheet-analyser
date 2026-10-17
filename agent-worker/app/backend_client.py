@@ -83,8 +83,10 @@ class BackendClient:
     def context(self, run_id: str) -> dict:
         return self._request("GET", f"/runs/{run_id}/context")
 
-    def complete(self, run_id: str, content: str) -> dict:
-        return self._request("POST", f"/runs/{run_id}/complete", {"content": content})
+    def complete(self, run_id: str, content: str, trace: dict | None = None) -> dict:
+        """Stores the answer. `trace` (plan, files in scope, tool calls) lets the user see how it was produced."""
+        body = {"content": content, **({"trace": trace} if trace else {})}
+        return self._request("POST", f"/runs/{run_id}/complete", body)
 
     def fail(self, run_id: str, error: str) -> dict:
         return self._request("POST", f"/runs/{run_id}/fail", {"error": error})
