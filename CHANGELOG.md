@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.1-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.0...v0.4.1-rc) (2026-10-17)
+
+
+### Bug Fixes
+
+* **backend:** start every S3 key with the project level and keep old objects reachable ([92f42f0](https://github.com/mitchou10/spreadsheet-analyser/commit/92f42f0d7d5581fc498d2c5696bfc752888e7fe9))
+* **workers:** start the search index keys with the project level ([1ab14df](https://github.com/mitchou10/spreadsheet-analyser/commit/1ab14df2a1c8d137edc17bc853f612c86aa698a9))
+
+
+### Dependencies
+
+* pass S3_KEY_PREFIX to the services that build or read S3 keys ([0dd46ee](https://github.com/mitchou10/spreadsheet-analyser/commit/0dd46ee16c34fcd7c977414b86befeb78b0be178))
+
 ## [0.4.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.3.0...v0.4.0) (2026-10-17)
 
 
