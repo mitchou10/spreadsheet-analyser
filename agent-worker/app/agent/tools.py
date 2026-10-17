@@ -4,7 +4,9 @@ from collections.abc import Callable
 from langchain_core.tools import StructuredTool
 from pydantic import BaseModel, Field
 
+from app.agent.account import Account
 from app.agent.catalog import Catalog, CatalogError
+from app.backend_client import BackendError
 
 MAX_TOOL_OUTPUT_CHARS = 6000
 
@@ -33,6 +35,15 @@ class DescribeColumnArgs(BaseModel):
     sheet: str | None = Field(default=None, description="Nom de la feuille si le fichier en a plusieurs.")
 
 
+class AccountFilesArgs(BaseModel):
+    collection: str | None = Field(default=None, description="Limiter à une collection (son nom ou son id).")
+    status: str | None = Field(
+        default=None,
+        description="Limiter à un état d'analyse : ready, pending, processing, error, stopped ou none (jamais analysé)",
+    )
+    limit: int = Field(default=50, ge=1, le=100, description="Nombre maximum de fichiers retournés.")
+
+
 class NoArgs(BaseModel):
     pass
 
@@ -47,17 +58,20 @@ def _render(payload) -> str:
     return text
 
 
-def build_tools(get_catalog: Callable[[], Catalog]) -> list[StructuredTool]:
-    """The agent's tools over the analyses. `get_catalog` is called at use time, once the catalog is loaded.
+def build_tools(get_catalog: Callable[[], Catalog], get_account: Callable[[], Account]) -> list[StructuredTool]:
+    """The agent's tools. `get_catalog` and `get_account` are called at use time: the analyses are loaded once the
+    run has started, and the account (a call to the backend) only if the agent asks about it.
 
     Errors (unknown file, column...) come back as text the model can act on instead of raising."""
 
-    def guarded(function: Callable) -> Callable:
+    def guarded(function: Callable, source: Callable) -> Callable:
         def run(**kwargs) -> str:
             try:
-                return _render(function(get_catalog(), **kwargs))
+                return _render(function(source(), **kwargs))
             except CatalogError as error:
                 return f"Erreur : {error}"
+            except BackendError as error:  # e.g. the account could not be read: say so rather than guess
+                return f"Erreur : information indisponible pour le moment ({error}). Ne l'invente pas."
 
         return run
 
@@ -101,7 +115,30 @@ def build_tools(get_catalog: Callable[[], Catalog]) -> list[StructuredTool]:
             lambda catalog, file, column, sheet=None: catalog.describe_column(file, column, sheet),
         ),
     ]
+    account_specs = [
+        (
+            "account_overview",
+            "Vue d'ensemble du COMPTE de l'utilisateur, quel que soit le périmètre de la question : combien de "
+            "collections il possède et combien sont partagées avec lui, combien de fichiers, leur taille, combien "
+            "sont analysés, en cours ou en erreur, et une ligne par collection (propriétaire, partage, dernier "
+            "import). À utiliser pour « combien de collections / fichiers ai-je ? », « qu'est-ce que j'ai ? ».",
+            NoArgs,
+            lambda account: account.overview(),
+        ),
+        (
+            "account_files",
+            "Liste les fichiers du COMPTE de l'utilisateur (nom, collection, taille, date d'import, état d'analyse), "
+            "du plus récent au plus ancien, même ceux qui ne sont pas dans le périmètre de la question. Filtrable "
+            "par collection et par état d'analyse (ex : les fichiers en erreur). Pour le contenu d'un fichier, "
+            "utilise plutôt les outils de recherche dans les analyses.",
+            AccountFilesArgs,
+            lambda account, collection=None, status=None, limit=50: account.files(collection, status, limit),
+        ),
+    ]
     return [
-        StructuredTool.from_function(func=guarded(function), name=name, description=description, args_schema=schema)
-        for name, description, schema, function in specs
+        StructuredTool.from_function(
+            func=guarded(function, source), name=name, description=description, args_schema=schema
+        )
+        for specs_, source in ((specs, get_catalog), (account_specs, get_account))
+        for name, description, schema, function in specs_
     ]

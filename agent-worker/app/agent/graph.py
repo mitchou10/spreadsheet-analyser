@@ -5,6 +5,7 @@ from typing import Annotated, TypedDict
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
 
+from app.agent.account import Account
 from app.agent.catalog import Catalog
 from app.agent.prompts import ANSWER_SYSTEM, FORCE_ANSWER, PLAN_SYSTEM, SCOPE_NOTE
 from app.agent.tools import build_tools
@@ -71,7 +72,15 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
     itself, drafts a plan for the last user message, then answers it, searching the analyses with tools as
     needed. `llm` needs `.invoke(messages)` and `.bind_tools(tools)`."""
     holder: dict[str, Catalog] = {}
-    tools = build_tools(lambda: holder["catalog"])
+
+    def get_account() -> Account:
+        # Asked to the backend the first time the agent needs it (most questions are about the files' content).
+        if "account" not in holder_account:
+            holder_account["account"] = Account(client.account(run_id))
+        return holder_account["account"]
+
+    holder_account: dict[str, Account] = {}
+    tools = build_tools(lambda: holder["catalog"], get_account)
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)
 
