@@ -1,4 +1,5 @@
 from app.services.actor import Actor
+from app.services.admin import AdminService
 from app.services.analysis import AnalysisService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
@@ -9,6 +10,7 @@ from app.services.storage import StorageService
 
 __all__ = [
     "Actor",
+    "AdminService",
     "ConflictError",
     "ForbiddenError",
     "AnalysisService",

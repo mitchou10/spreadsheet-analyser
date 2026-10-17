@@ -15,3 +15,6 @@ class CollectionRepository(BaseRepository[Collection]):
             .where(or_(Collection.created_by == user_id, Collection.id.in_(shared)))
             .order_by(Collection.created_at.desc())
         )
+
+    async def list_all(self) -> list[Collection]:
+        return await self._all(self._select().order_by(Collection.name, Collection.created_at))

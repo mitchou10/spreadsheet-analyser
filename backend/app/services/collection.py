@@ -24,7 +24,12 @@ class CollectionService:
 
     async def create(self, actor: Actor, name: str, description: str | None = None) -> Collection:
         collection = await self.collections.add(
-            Collection(name=name, description=description, created_by=actor.user_id)
+            Collection(
+                name=name,
+                description=description,
+                created_by=actor.user_id,
+                created_by_email=normalize_email(actor.email) or None,
+            )
         )
         await self.session.commit()
         return collection

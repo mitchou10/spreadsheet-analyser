@@ -210,3 +210,32 @@ class ScopeFileOut(BaseModel):
     analysis_status: AnalysisStatus | None
     # S3 key of analyse.json, set once the analysis is ready.
     result_key: str | None
+
+
+class AdminAccessEntryOut(BaseModel):
+    email: str
+    granted_by: str
+    created_at: datetime
+
+
+class AdminCollectionOut(BaseModel):
+    collection_id: uuid.UUID
+    name: str
+    description: str | None
+    created_at: datetime
+    owner_id: str
+    owner_email: str | None
+    file_count: int
+    shared_with: list[AdminAccessEntryOut]
+
+
+class AdminPersonCollectionOut(BaseModel):
+    collection_id: uuid.UUID
+    name: str
+    role: str
+
+
+class AdminPersonOut(BaseModel):
+    email: str | None
+    user_id: str | None
+    collections: list[AdminPersonCollectionOut]
