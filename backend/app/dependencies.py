@@ -16,6 +16,7 @@ from app.services import (
     ConversationService,
     FileService,
     RunService,
+    SqlQueryService,
     StorageService,
 )
 from app.services.dispatcher import CeleryRunDispatcher, RunDispatcher
@@ -122,3 +123,12 @@ def get_admin_service(
 
 
 AdminServiceDep = Annotated[AdminService, Depends(get_admin_service)]
+
+
+def get_sql_query_service(
+    session: SessionDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> SqlQueryService:
+    return SqlQueryService(session, dispatcher)
+
+
+SqlQueryServiceDep = Annotated[SqlQueryService, Depends(get_sql_query_service)]

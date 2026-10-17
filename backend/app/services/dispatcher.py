@@ -16,6 +16,10 @@ class RunDispatcher(Protocol):
         """Hands a spreadsheet analysis to the analysis worker; returns the queue's task id."""
         ...
 
+    async def enqueue_query(self, query_id: uuid.UUID) -> str:
+        """Hands a SQL query to the query worker; returns the queue's task id."""
+        ...
+
     async def enqueue_index_file(self, analysis_id: uuid.UUID) -> str:
         """Tells the index worker that an analysis is ready: its file joins the collection's search index."""
         ...
@@ -44,6 +48,8 @@ class CeleryRunDispatcher:
         self._queue = settings.RUN_QUEUE
         self._analysis_task_name = settings.ANALYSIS_TASK_NAME
         self._analysis_queue = settings.ANALYSIS_QUEUE
+        self._query_task_name = settings.QUERY_TASK_NAME
+        self._query_queue = settings.QUERY_QUEUE
         self._index_queue = settings.INDEX_QUEUE
         self._index_file_task_name = settings.INDEX_FILE_TASK_NAME
         self._forget_task_name = settings.INDEX_FORGET_TASK_NAME
@@ -59,6 +65,12 @@ class CeleryRunDispatcher:
     async def enqueue_analysis(self, analysis_id: uuid.UUID) -> str:
         result = await asyncio.to_thread(
             self._celery.send_task, self._analysis_task_name, args=[str(analysis_id)], queue=self._analysis_queue
+        )
+        return result.id
+
+    async def enqueue_query(self, query_id: uuid.UUID) -> str:
+        result = await asyncio.to_thread(
+            self._celery.send_task, self._query_task_name, args=[str(query_id)], queue=self._query_queue
         )
         return result.id
 

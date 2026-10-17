@@ -12,6 +12,10 @@ class InternalSettings(BaseSettings):
     # Spreadsheet analysis runs in its own worker (own queue, own memory limit).
     ANALYSIS_TASK_NAME: str = "analysis.run"
     ANALYSIS_QUEUE: str = "analysis"
+    # SQL queries on the analysed files: same worker image as the analysis, own queue and own processes, so that a
+    # person waiting for an answer never queues behind the analysis of a large file.
+    QUERY_TASK_NAME: str = "analysis.query"
+    QUERY_QUEUE: str = "query"
     # Everything about the saved search indexes (of the collections and of the users) is the index worker's job.
     INDEX_QUEUE: str = "index"
     INDEX_FILE_TASK_NAME: str = "index.file_analysed"

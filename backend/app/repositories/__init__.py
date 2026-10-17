@@ -5,6 +5,7 @@ from app.repositories.conversation import ConversationRepository
 from app.repositories.file import FileRepository
 from app.repositories.message import MessageRepository
 from app.repositories.run import RunRepository
+from app.repositories.sql_query import SqlQueryRepository
 
 __all__ = [
     "AccessCollectionRepository",
@@ -14,4 +15,5 @@ __all__ = [
     "FileRepository",
     "MessageRepository",
     "RunRepository",
+    "SqlQueryRepository",
 ]
