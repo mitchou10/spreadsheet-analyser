@@ -14,6 +14,7 @@ from app.routers.collections import collections_router, files_router
 from app.routers.conversations import router as conversations_router
 from app.routers.health import router as health_router
 from app.routers.models import router as models_router
+from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
 from app.services import ConflictError, ForbiddenError, NotFoundError
@@ -69,6 +70,7 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
+app.include_router(queries_internal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 
 

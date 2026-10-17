@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import AnalysisStatus, ConversationStatus, MessageRole, RunStatus
+from app.models import AnalysisStatus, ConversationStatus, MessageRole, RunStatus, SqlQueryStatus
 
 
 class CollectionCreate(BaseModel):
@@ -284,6 +284,58 @@ class AccountCollectionOut(BaseModel):
 class AccountOut(BaseModel):
     collections: list[AccountCollectionOut]
     truncated: bool
+
+
+class SqlQueryFileIn(BaseModel):
+    # The schema name the SQL uses for this file (the agent's reference: f1, f2...).
+    ref: str = Field(pattern=r"^[A-Za-z][A-Za-z0-9_]{0,31}$")
+    file_id: uuid.UUID
+
+
+class SqlQueryIn(BaseModel):
+    sql: str = Field(min_length=1, max_length=20_000)
+    files: list[SqlQueryFileIn] = Field(min_length=1, max_length=10)
+
+
+class SqlColumnOut(BaseModel):
+    name: str = Field(max_length=500)
+    type: str = Field(max_length=100)
+
+
+class SqlResult(BaseModel):
+    """A bounded query result: the worker already cut it, this is the backend's own ceiling."""
+
+    columns: list[SqlColumnOut] = Field(max_length=500)
+    rows: list[list] = Field(max_length=500)
+    truncated: bool = False
+
+
+class SqlTableOut(BaseModel):
+    # A table as the SQL must name it (f1."Ventes"), with its columns.
+    table: str = Field(max_length=600)
+    columns: list[SqlColumnOut] = Field(max_length=500)
+
+
+class SqlQueryFailIn(BaseModel):
+    error: str
+    tables: list[SqlTableOut] = Field(default=[], max_length=300)
+
+
+class SqlQueryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    run_id: uuid.UUID
+    status: SqlQueryStatus
+    result: SqlResult | None
+    error: str | None
+    available_tables: list[SqlTableOut] | None
+
+
+class SqlQueryContextOut(BaseModel):
+    query_id: uuid.UUID
+    sql: str
+    tables: list[dict]
 
 
 class AdminAccessEntryOut(BaseModel):
