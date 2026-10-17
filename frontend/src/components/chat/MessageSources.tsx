@@ -1,5 +1,6 @@
 import type { MessageTrace } from '@/types/conversation'
 import { ChevronRight, Wrench } from 'lucide-react'
+import { Markdown } from './Markdown'
 import { ScopeChip } from './ScopeChip'
 
 // The agent's tools (agent-worker/app/agent/tools.py), named for people.
@@ -16,13 +17,23 @@ const TOOL_LABELS: Record<string, string> = {
 
 const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool
 
-/** The tool's output is JSON for the agent: show it indented when it parses, as is otherwise (errors are text). */
-function pretty(output: string): string {
+/** A fenced code block that its own content cannot close early (a longer fence than any run of backticks inside). */
+function fenced(text: string, language: string): string {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length))
+  const fence = '`'.repeat(Math.max(3, longest + 1))
+  return `${fence}${language}\n${text}\n${fence}`
+}
+
+/** What a tool gave back, as markdown: JSON (what most tools return) indented in a code block, text (errors,
+ * messages for the model) as it is. */
+function outputAsMarkdown(output: string): string {
   try {
-    return JSON.stringify(JSON.parse(output), null, 2)
+    const parsed = JSON.parse(output)
+    if (parsed !== null && typeof parsed === 'object') return fenced(JSON.stringify(parsed, null, 2), 'json')
   } catch {
-    return output
+    // not JSON: it is text
   }
+  return output
 }
 
 interface QueryResult {
@@ -47,7 +58,9 @@ function QueryStep({ sql, output }: { sql: string; output: string }) {
   const result = asQueryResult(output)
   return (
     <div className="flex flex-col gap-2 border-t px-2.5 py-2">
-      <pre className="overflow-auto rounded-md bg-muted/60 p-2 text-[11px] leading-snug whitespace-pre-wrap">{sql}</pre>
+      <div className="text-[11px] [&_pre]:my-0 [&_pre]:bg-muted/70">
+        <Markdown>{fenced(sql, 'sql')}</Markdown>
+      </div>
       {result ? (
         <>
           <div className="max-h-64 overflow-auto rounded-md border">
@@ -80,7 +93,9 @@ function QueryStep({ sql, output }: { sql: string; output: string }) {
           </p>
         </>
       ) : (
-        <pre className="max-h-64 overflow-auto text-[11px] leading-snug whitespace-pre-wrap text-destructive">{output}</pre>
+        <div className="max-h-64 overflow-auto text-xs text-destructive">
+          <Markdown>{output}</Markdown>
+        </div>
       )}
     </div>
   )
@@ -110,7 +125,9 @@ export function MessageSources({ trace }: { trace: MessageTrace }) {
         {trace.plan && (
           <section>
             <h4 className="mb-1 text-xs font-medium text-muted-foreground">Plan</h4>
-            <p className="text-xs whitespace-pre-wrap">{trace.plan}</p>
+            <div className="text-xs">
+              <Markdown>{trace.plan}</Markdown>
+            </div>
           </section>
         )}
 
@@ -139,9 +156,9 @@ export function MessageSources({ trace }: { trace: MessageTrace }) {
                     {step.tool === 'query_data' && typeof step.arguments.sql === 'string' ? (
                       <QueryStep sql={step.arguments.sql} output={step.output} />
                     ) : (
-                      <pre className="max-h-64 overflow-auto border-t px-2.5 py-2 text-[11px] leading-snug whitespace-pre-wrap">
-                        {pretty(step.output)}
-                      </pre>
+                      <div className="max-h-64 overflow-auto border-t px-2.5 py-2 text-xs [&_pre]:my-0 [&_pre]:bg-muted/70 [&_pre]:text-[11px]">
+                        <Markdown>{outputAsMarkdown(step.output)}</Markdown>
+                      </div>
                     )}
                   </details>
                 </li>
