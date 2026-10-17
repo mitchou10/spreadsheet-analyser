@@ -1,0 +1,73 @@
+{
+  "realm": "spreadsheet-analyser",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginTheme": "keycloak",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Full administrative access to spreadsheet-analyser" },
+      { "name": "user", "description": "Standard spreadsheet-analyser user" }
+    ],
+    "client": {
+      "spreadsheet-analyser-backend": [
+        { "name": "admin", "description": "Full administrative access to spreadsheet-analyser" },
+        { "name": "user", "description": "Standard spreadsheet-analyser user" }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "spreadsheet-analyser-backend",
+      "name": "spreadsheet-analyser BFF",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "secret": "dev-only-secret-not-for-prod",
+      "redirectUris": ["http://localhost:8000/api/auth/callback"],
+      "webOrigins": ["http://localhost:5173", "http://localhost:8081"],
+      "defaultClientScopes": ["openid", "profile", "email", "roles"],
+      "attributes": {
+        "post.logout.redirect.uris": "http://localhost:5173##http://localhost:8081"
+      },
+      "protocolMappers": [
+        {
+          "name": "client-roles-in-userinfo",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "spreadsheet-analyser-backend",
+            "claim.name": "resource_access.spreadsheet-analyser-backend.roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "dev",
+      "email": "dev@example.com",
+      "firstName": "Dev",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "dev-password", "temporary": false }],
+      "realmRoles": ["admin", "user"],
+      "clientRoles": {
+        "spreadsheet-analyser-backend": ["admin", "user"]
+      }
+    }
+  ]
+}
