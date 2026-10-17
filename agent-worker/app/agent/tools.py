@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.account import Account
 from app.agent.catalog import Catalog, CatalogError
+from app.agent.sql import SqlRunner
 from app.backend_client import BackendError
 
 MAX_TOOL_OUTPUT_CHARS = 6000
@@ -44,6 +45,17 @@ class AccountFilesArgs(BaseModel):
     limit: int = Field(default=50, ge=1, le=100, description="Nombre maximum de fichiers retournés.")
 
 
+class QueryDataArgs(BaseModel):
+    sql: str = Field(
+        description='Une requête SQL DuckDB en lecture (SELECT, WITH). Nomme chaque table f1."Feuille" : le schéma est '
+        "la référence du fichier, la table est le nom exact de la feuille, entre guillemets doubles (colonnes aussi "
+        'si elles ont des espaces ou des accents). Plusieurs fichiers : jointure entre f1."A" et f2."B".'
+    )
+    files: list[str] | None = Field(
+        default=None, description="Fichiers à ouvrir (réf. f1, id ou nom). Inutile si le SQL utilise f1., f2.…"
+    )
+
+
 class NoArgs(BaseModel):
     pass
 
@@ -58,7 +70,9 @@ def _render(payload) -> str:
     return text
 
 
-def build_tools(get_catalog: Callable[[], Catalog], get_account: Callable[[], Account]) -> list[StructuredTool]:
+def build_tools(
+    get_catalog: Callable[[], Catalog], get_account: Callable[[], Account], get_sql: Callable[[], SqlRunner]
+) -> list[StructuredTool]:
     """The agent's tools. `get_catalog` and `get_account` are called at use time: the analyses are loaded once the
     run has started, and the account (a call to the backend) only if the agent asks about it.
 
@@ -115,6 +129,20 @@ def build_tools(get_catalog: Callable[[], Catalog], get_account: Callable[[], Ac
             lambda catalog, file, column, sheet=None: catalog.describe_column(file, column, sheet),
         ),
     ]
+    sql_specs = [
+        (
+            "query_data",
+            "Interroge les VRAIES DONNÉES des fichiers avec du SQL (DuckDB) : sommes, moyennes, comptages, filtres, "
+            "regroupements, classements, jointures entre plusieurs fichiers. À utiliser dès qu'il faut calculer sur "
+            "les lignes (total par région, nombre de lignes où..., top 5, évolution par mois...), ce que les "
+            "analyses seules ne permettent pas. Lecture seule ; le résultat est limité à quelques centaines de "
+            "lignes : agrège plutôt que de lister. Les cellules qui ne correspondent pas au type d'une colonne "
+            "(ex. du texte dans une colonne de nombres) rendent toute la colonne VARCHAR : utilise TRY_CAST. "
+            "En cas d'erreur, le message liste les tables et colonnes disponibles.",
+            QueryDataArgs,
+            lambda runner, sql, files=None: runner.run(sql, files),
+        ),
+    ]
     account_specs = [
         (
             "account_overview",
@@ -139,6 +167,6 @@ def build_tools(get_catalog: Callable[[], Catalog], get_account: Callable[[], Ac
         StructuredTool.from_function(
             func=guarded(function, source), name=name, description=description, args_schema=schema
         )
-        for specs_, source in ((specs, get_catalog), (account_specs, get_account))
+        for specs_, source in ((specs, get_catalog), (sql_specs, get_sql), (account_specs, get_account))
         for name, description, schema, function in specs_
     ]

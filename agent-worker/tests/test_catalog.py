@@ -288,7 +288,7 @@ def test_overview_is_capped_for_big_libraries() -> None:
 
 
 def test_tools_return_json_and_turn_errors_into_text(catalog) -> None:
-    tools = {tool.name: tool for tool in build_tools(lambda: catalog, lambda: None)}
+    tools = {tool.name: tool for tool in build_tools(lambda: catalog, lambda: None, lambda: None)}
 
     found = json.loads(tools["search"].invoke({"query": "customer"}))
     assert found["columns"][0]["name"] == "nom_client"
@@ -300,7 +300,7 @@ def test_tools_return_json_and_turn_errors_into_text(catalog) -> None:
 
 def test_huge_tool_output_is_clipped() -> None:
     many = build(*[entry(f"f{i}", f"file_number_{i}.csv", "C", [sheet("S", [column("a")])]) for i in range(1, 151)])
-    tool = next(t for t in build_tools(lambda: many, lambda: None) if t.name == "list_files")
+    tool = next(t for t in build_tools(lambda: many, lambda: None, lambda: None) if t.name == "list_files")
 
     output = tool.invoke({})
 

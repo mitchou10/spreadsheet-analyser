@@ -8,6 +8,7 @@ from langgraph.graph import END, START, StateGraph
 from app.agent.account import Account
 from app.agent.catalog import Catalog
 from app.agent.prompts import ANSWER_SYSTEM, FORCE_ANSWER, PLAN_SYSTEM, SCOPE_NOTE
+from app.agent.sql import SqlRunner
 from app.agent.tools import build_tools
 from app.backend_client import BackendClient
 
@@ -80,7 +81,11 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
         return holder_account["account"]
 
     holder_account: dict[str, Account] = {}
-    tools = build_tools(lambda: holder["catalog"], get_account)
+
+    def get_sql() -> SqlRunner:
+        return SqlRunner(client, run_id, holder["catalog"])
+
+    tools = build_tools(lambda: holder["catalog"], get_account, get_sql)
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)
 
