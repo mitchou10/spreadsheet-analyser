@@ -33,6 +33,9 @@ class AnalysisStorage:
             raise ValueError(f"{key} is larger than {max_bytes} bytes")
         return json.loads(self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read())
 
+    def upload_bytes(self, key: str, payload: bytes, content_type: str) -> None:
+        self._client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType=content_type)
+
     def upload_file(self, key: str, source: Path, content_type: str = "application/octet-stream") -> None:
         """Streams a file from disk (boto3 multipart transfer)."""
         self._client.upload_file(str(source), self.bucket, key, ExtraArgs={"ContentType": content_type})
