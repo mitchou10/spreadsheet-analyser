@@ -1,20 +1,20 @@
 name: Unit Tests
 
-# Backend + worker only for now: the frontend has no unit test suite yet,
+# Backend + workers only for now: the frontend has no unit test suite yet,
 # just typecheck+build covered by lint.yml.
 
 on:
     workflow_call:
         inputs:
             PYTHON_VERSION:
-                description: Python version used to run backend/worker tests
+                description: Python version used to run backend/workers tests
                 required: false
                 type: string
                 default: "3.12"
     workflow_dispatch:
         inputs:
             PYTHON_VERSION:
-                description: Python version used to run backend/worker tests
+                description: Python version used to run backend/workers tests
                 required: false
                 type: string
                 default: "3.12"
@@ -74,8 +74,8 @@ jobs:
               working-directory: backend
               run: uv run pytest --cov=app --cov-report=term-missing
 
-    unit-tests-worker:
-        name: Worker
+    unit-tests-agent-worker:
+        name: Agent worker
         runs-on: ubuntu-latest
         permissions:
             contents: read
@@ -88,12 +88,36 @@ jobs:
               with:
                   python-version: ${{ inputs.PYTHON_VERSION }}
                   enable-cache: true
-                  cache-dependency-glob: worker/uv.lock
+                  cache-dependency-glob: agent-worker/uv.lock
 
-            - name: Install worker dependencies
-              working-directory: worker
+            - name: Install agent-worker dependencies
+              working-directory: agent-worker
               run: uv sync --group dev
 
             - name: Run tests
-              working-directory: worker
+              working-directory: agent-worker
+              run: uv run pytest
+
+    unit-tests-analysis-worker:
+        name: Analysis worker
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+            - name: Set up uv
+              uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+              with:
+                  python-version: ${{ inputs.PYTHON_VERSION }}
+                  enable-cache: true
+                  cache-dependency-glob: analysis-worker/uv.lock
+
+            - name: Install analysis-worker dependencies
+              working-directory: analysis-worker
+              run: uv sync --group dev
+
+            - name: Run tests
+              working-directory: analysis-worker
               run: uv run pytest

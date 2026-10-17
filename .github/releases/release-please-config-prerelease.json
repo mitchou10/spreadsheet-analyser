@@ -20,7 +20,12 @@
         },
         {
           "type": "toml",
-          "path": "worker/pyproject.toml",
+          "path": "agent-worker/pyproject.toml",
+          "jsonpath": "project.version"
+        },
+        {
+          "type": "toml",
+          "path": "analysis-worker/pyproject.toml",
           "jsonpath": "project.version"
         }
       ],

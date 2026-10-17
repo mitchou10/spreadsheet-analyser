@@ -35,7 +35,8 @@ jobs:
         outputs:
             frontend: ${{ steps.filter.outputs.frontend }}
             backend: ${{ steps.filter.outputs.backend }}
-            worker: ${{ steps.filter.outputs.worker }}
+            agent-worker: ${{ steps.filter.outputs.agent-worker }}
+            analysis-worker: ${{ steps.filter.outputs.analysis-worker }}
             helm: ${{ steps.filter.outputs.helm }}
             ci: ${{ steps.filter.outputs.ci }}
             services: ${{ steps.services.outputs.services }}
@@ -52,8 +53,10 @@ jobs:
                         - 'frontend/**'
                       backend:
                         - 'backend/**'
-                      worker:
-                        - 'worker/**'
+                      agent-worker:
+                        - 'agent-worker/**'
+                      analysis-worker:
+                        - 'analysis-worker/**'
                       helm:
                         - 'helm/**'
                         - 'ci/configs/ct.yaml'
@@ -65,7 +68,8 @@ jobs:
               env:
                   FRONTEND: ${{ steps.filter.outputs.frontend }}
                   BACKEND: ${{ steps.filter.outputs.backend }}
-                  WORKER: ${{ steps.filter.outputs.worker }}
+                  AGENT_WORKER: ${{ steps.filter.outputs.agent-worker }}
+                  ANALYSIS_WORKER: ${{ steps.filter.outputs.analysis-worker }}
                   CI: ${{ steps.filter.outputs.ci }}
               run: |
                   set -euo pipefail
@@ -79,8 +83,11 @@ jobs:
                   if [ "$BACKEND" = "true" ] || [ "$CI" = "true" ]; then
                     add '{"name":"backend","context":"backend","dockerfile":"backend/Dockerfile","target":"runtime"}'
                   fi
-                  if [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
-                    add '{"name":"worker","context":"worker","dockerfile":"worker/Dockerfile","target":"runtime"}'
+                  if [ "$AGENT_WORKER" = "true" ] || [ "$CI" = "true" ]; then
+                    add '{"name":"agent-worker","context":"agent-worker","dockerfile":"agent-worker/Dockerfile","target":"runtime"}'
+                  fi
+                  if [ "$ANALYSIS_WORKER" = "true" ] || [ "$CI" = "true" ]; then
+                    add '{"name":"analysis-worker","context":"analysis-worker","dockerfile":"analysis-worker/Dockerfile","target":"runtime"}'
                   fi
 
                   echo "Images to build: $SERVICES"
@@ -132,7 +139,7 @@ jobs:
         uses: ./.github/workflows/lint.yml
         needs:
             - path-filter
-        if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
+        if: ${{ needs.path-filter.outputs.frontend == 'true' || needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
         permissions:
             contents: read
 
@@ -140,7 +147,7 @@ jobs:
         uses: ./.github/workflows/unit-tests.yml
         needs:
             - path-filter
-        if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
+        if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.agent-worker == 'true' || needs.path-filter.outputs.analysis-worker == 'true' || needs.path-filter.outputs.ci == 'true' }}
         permissions:
             contents: read
 
