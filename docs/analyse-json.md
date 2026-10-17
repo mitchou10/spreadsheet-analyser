@@ -3,7 +3,7 @@
 Pour chaque version d'un fichier, l'`analysis-worker` produit un profil statistique du contenu et l'enregistre
 dans S3 (RustFS en local). Ce document décrit ce profil.
 
-Code : `worker/app/analysis/` (`readers.py` lit les fichiers, `profile.py` calcule les statistiques,
+Code : `analysis-worker/app/analysis/` (`readers.py` lit les fichiers, `profile.py` calcule les statistiques,
 `analyzer.py` assemble le résultat).
 
 ## Où il est enregistré

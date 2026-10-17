@@ -1,6 +1,6 @@
 # spreadsheet-analyser
 
-Monorepo with `frontend` (Vite + React), `backend` (FastAPI), and `worker` (Celery), bootstrapped with the same CI/CD setup as [Muffin](https://github.com/mitchou10) (GitHub Actions, release-please, Docker/GHCR, Helm, Trivy/Gitleaks scans).
+Monorepo with `frontend` (Vite + React), `backend` (FastAPI), and two Celery workers (`agent-worker`, `analysis-worker`), bootstrapped with the same CI/CD setup as [Muffin](https://github.com/mitchou10) (GitHub Actions, release-please, Docker/GHCR, Helm, Trivy/Gitleaks scans).
 
 ## Authentication (BFF + Keycloak)
 

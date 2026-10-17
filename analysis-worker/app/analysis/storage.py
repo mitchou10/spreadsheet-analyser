@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 
@@ -26,11 +25,3 @@ class AnalysisStorage:
 
     def upload_json(self, key: str, payload: bytes) -> None:
         self._client.put_object(Bucket=self.bucket, Key=key, Body=payload, ContentType="application/json")
-
-    def get_json(self, key: str, max_bytes: int | None = None):
-        """Reads a (small) JSON object; refuses objects over `max_bytes` instead of loading them."""
-        response = self._client.get_object(Bucket=self.bucket, Key=key)
-        if max_bytes is not None and response.get("ContentLength", 0) > max_bytes:
-            response["Body"].close()
-            raise ValueError(f"{key} is {response['ContentLength']} bytes, over the {max_bytes} bytes limit")
-        return json.loads(response["Body"].read())

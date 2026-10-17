@@ -20,7 +20,7 @@ class RunConflict(BackendError):
 
 
 class BackendClient:
-    """Authenticated HTTP client for the backend's internal API (`/api/internal/*`).
+    """Authenticated HTTP client for the backend's internal API (`/api/internal/*`), analysis endpoints.
 
     The workers never touch the database: they read and update everything through this client, which
     sends the shared `INTERNAL_API_TOKEN` as `Authorization: Bearer <token>`. Any worker (agent,
@@ -74,31 +74,6 @@ class BackendClient:
         if response.status_code == 409:
             raise RunConflict(str(detail), response.status_code)
         raise BackendError(f"{method} {path} -> {response.status_code}: {detail}", response.status_code)
-
-    # --- Runs ---
-
-    def start(self, run_id: str) -> dict:
-        return self._request("POST", f"/runs/{run_id}/start")
-
-    def context(self, run_id: str) -> dict:
-        return self._request("GET", f"/runs/{run_id}/context")
-
-    def complete(self, run_id: str, content: str) -> dict:
-        return self._request("POST", f"/runs/{run_id}/complete", {"content": content})
-
-    def fail(self, run_id: str, error: str) -> dict:
-        return self._request("POST", f"/runs/{run_id}/fail", {"error": error})
-
-    def run_files(self, run_id: str) -> list[dict]:
-        """Files the run's agent may look at, each with its latest analysis state and the S3 key of
-        analyse.json once ready: [{file_id, file_name, collection_name, version, analysis_status, result_key...}]"""
-        return self._request("GET", f"/runs/{run_id}/files")
-
-    # --- Conversations ---
-
-    def messages(self, conversation_id: str) -> list[dict]:
-        """Full history, oldest first: [{id, role, content, collection_ids, file_ids, created_at}]."""
-        return self._request("GET", f"/conversations/{conversation_id}/messages")
 
     # --- Spreadsheet analyses ---
 
