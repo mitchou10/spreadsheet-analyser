@@ -16,7 +16,7 @@ wheels = [
 
 [[package]]
 name = "analysis-worker"
-version = "0.4.1-rc"
+version = "0.5.0-rc"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },

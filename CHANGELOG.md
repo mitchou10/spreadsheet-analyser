@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.0-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.1-rc...v0.5.0-rc) (2026-10-17)
+
+
+### Features
+
+* **agent-worker:** send the plan, the files and the tool calls with each answer ([bceff09](https://github.com/mitchou10/spreadsheet-analyser/commit/bceff09b7c310891065360c398096d79e8262ee0))
+* **backend:** name the sources of a message, page the messages and store the agent's trace ([c9bbc33](https://github.com/mitchou10/spreadsheet-analyser/commit/c9bbc33a429e7ab4ecd78aade9336a7e7ca61f97))
+* **frontend:** choose the sources with a plus menu, page the chat and show the agent's tools ([e794bc0](https://github.com/mitchou10/spreadsheet-analyser/commit/e794bc0dc96957598fe9d6b16ef8db8ec67384f7))
+* **frontend:** render the assistant's answers as markdown ([9581df6](https://github.com/mitchou10/spreadsheet-analyser/commit/9581df6bd005f57c6758f2ad4f4dc30b4fd24d5d))
+
+
+### Bug Fixes
+
+* drop LLM_DEFAULT_MODEL and default to the first model the provider offers ([8d3268c](https://github.com/mitchou10/spreadsheet-analyser/commit/8d3268c70abc997ac033cd63d82bbbea61ecf3dc))
+
 ## [0.4.1-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.0...v0.4.1-rc) (2026-10-17)
 
 
