@@ -261,6 +261,31 @@ class ScopeFileOut(BaseModel):
     result_key: str | None
 
 
+class AccountFileOut(BaseModel):
+    file_id: uuid.UUID
+    name: str
+    version: int
+    size_bytes: int
+    uploaded_at: datetime
+    analysis_status: AnalysisStatus | None
+
+
+class AccountCollectionOut(BaseModel):
+    collection_id: uuid.UUID
+    name: str
+    description: str | None
+    created_at: datetime
+    is_owner: bool
+    # Number of people it is shared with (owner only; null for a collection shared with the requester).
+    shared_with: int | None
+    files: list[AccountFileOut]
+
+
+class AccountOut(BaseModel):
+    collections: list[AccountCollectionOut]
+    truncated: bool
+
+
 class AdminAccessEntryOut(BaseModel):
     email: str
     granted_by: str

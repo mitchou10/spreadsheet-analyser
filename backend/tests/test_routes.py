@@ -306,6 +306,30 @@ async def test_a_trace_that_is_too_large_is_refused(client, monkeypatch) -> None
     assert refused.status_code == 422
 
 
+async def test_internal_run_account_describes_the_requesters_collections_and_files(
+    client, storage, monkeypatch
+) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    await client.post(f"/api/collections/{collection['id']}/files", files=[("files", ("a.csv", b"1", "text/csv"))])
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+
+    account = await client.get(f"/api/internal/runs/{run['id']}/account", headers=worker)
+
+    assert account.status_code == 200
+    body = account.json()
+    assert body["truncated"] is False
+    assert [(c["name"], c["is_owner"], c["shared_with"]) for c in body["collections"]] == [
+        (collection["name"], True, 0)
+    ]
+    assert [(f["name"], f["analysis_status"]) for f in body["collections"][0]["files"]] == [("a.csv", "pending")]
+    missing = "/api/internal/runs/00000000-0000-0000-0000-000000000000/account"
+    assert (await client.get(missing, headers=worker)).status_code == 404
+    assert (await client.get(f"/api/internal/runs/{run['id']}/account")).status_code == 401
+
+
 async def test_cancel_run_route_and_worker_conflict(client, monkeypatch) -> None:
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
     worker = {"Authorization": "Bearer secret"}

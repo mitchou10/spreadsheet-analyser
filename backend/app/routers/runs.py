@@ -12,6 +12,7 @@ from app.dependencies import (
     require_internal_token,
 )
 from app.schemas import (
+    AccountOut,
     AnalysisCompleteIn,
     AnalysisContextOut,
     AnalysisFailIn,
@@ -54,6 +55,11 @@ async def run_context(run_id: uuid.UUID, service: RunServiceDep) -> RunContextOu
 @internal_router.get("/runs/{run_id}/files", summary="Files the agent may search, with their latest analysis")
 async def run_files(run_id: uuid.UUID, service: RunServiceDep) -> list[ScopeFileOut]:
     return [ScopeFileOut(**asdict(file)) for file in await service.scope_files(run_id)]
+
+
+@internal_router.get("/runs/{run_id}/account", summary="Everything the requester can read: collections, files, states")
+async def run_account(run_id: uuid.UUID, service: RunServiceDep) -> AccountOut:
+    return AccountOut.model_validate(asdict(await service.account(run_id)))
 
 
 @internal_router.post("/runs/{run_id}/start", summary="queued -> running (409 if cancelled meanwhile)")

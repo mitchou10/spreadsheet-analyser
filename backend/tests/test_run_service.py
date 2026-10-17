@@ -248,3 +248,59 @@ async def test_the_first_question_attributes_legacy_collections_to_their_owner(s
 
     assert (await CollectionService(session, storage).get(ALICE, legacy.id)).created_by_email == ALICE.email
     assert dispatcher.user_rebuilds == [ALICE.email]
+
+
+async def test_account_covers_what_the_requester_owns_and_what_is_shared_with_them(
+    session, dispatcher, library
+) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "combien de fichiers ai-je ?")
+
+    account = await service.account(run.id)
+
+    by_name = {c.name: c for c in account.collections}
+    assert set(by_name) == {"Ventes", "RH", "Chez Bob"}
+    assert (by_name["Ventes"].is_owner, by_name["Ventes"].shared_with) == (True, 0)
+    assert (by_name["Chez Bob"].is_owner, by_name["Chez Bob"].shared_with) == (False, None)
+    assert sorted(f.name for f in by_name["Ventes"].files) == ["a.csv", "b.csv"]
+    statuses = {f.name: f.analysis_status for f in by_name["Ventes"].files}
+    assert statuses == {"a.csv": "ready", "b.csv": None}
+    assert account.truncated is False
+
+
+async def test_account_ignores_the_scope_of_the_message(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "q", collection_ids=[library.hr.id])
+
+    account = await service.account(run.id)
+
+    assert {c.name for c in account.collections} == {"Ventes", "RH", "Chez Bob"}
+
+
+async def test_account_counts_how_many_people_an_owned_collection_is_shared_with(session, dispatcher, library) -> None:
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(BOB)
+    _, run = await service.send_message(BOB, conversation.id, "q")
+
+    account = await service.account(run.id)
+
+    assert [(c.name, c.is_owner, c.shared_with) for c in account.collections] == [("Chez Bob", True, 1)]
+
+
+async def test_account_cuts_the_lists_of_files_when_there_are_too_many(
+    session, dispatcher, library, monkeypatch
+) -> None:
+    from app.services import run as run_module
+
+    monkeypatch.setattr(run_module, "MAX_ACCOUNT_FILES", 2)
+    service = RunService(session, dispatcher)
+    conversation = await ConversationService(session).create(ALICE)
+    _, run = await service.send_message(ALICE, conversation.id, "q")
+
+    account = await service.account(run.id)
+
+    assert sum(len(c.files) for c in account.collections) == 2
+    assert account.truncated is True
+    assert len(account.collections) == 3  # every collection is still listed
