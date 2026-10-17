@@ -1,111 +1,121 @@
-import { useState } from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useMatch, useNavigate } from 'react-router'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
-import { mockCollections } from '@/data/mockCollections'
-import { mockConversations } from '@/data/mockConversations'
-import type { SpreadsheetFile } from '@/types/collection'
-import type { Message } from '@/types/conversation'
+import { useCollections } from '@/hooks/useCollections'
+import { useConversations } from '@/hooks/useConversations'
 import { ChatView } from '../chat/ChatView'
 import { CollectionDetailView } from '../collections/CollectionDetailView'
 import { CollectionsListView } from '../collections/CollectionsListView'
 import { AppHeader } from './AppHeader'
 import { AppSidebar } from './AppSidebar'
 
-type View = 'chat' | 'collections' | 'collection-detail'
+function CollectionNotFound() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground">
+      <p>Cette collection n'existe pas ou vous n'y avez pas accès.</p>
+      <Link to="/collections" className="text-foreground underline">
+        Retour aux collections
+      </Link>
+    </div>
+  )
+}
 
 export function AppShell() {
-  const [conversations, setConversations] = useState(mockConversations)
-  const [activeId, setActiveId] = useState<string | null>(conversations[0]?.id ?? null)
-  const [collections, setCollections] = useState(mockCollections)
-  const [activeCollectionId, setActiveCollectionId] = useState<string | null>(null)
-  const [view, setView] = useState<View>('chat')
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // The URL is the source of truth for what is open: /chat/:conversationId, /collections/:collectionId.
+  const activeId = useMatch('/chat/:conversationId')?.params.conversationId ?? null
+  const activeCollectionId = useMatch('/collections/:collectionId')?.params.collectionId ?? null
 
-  const activeConversation = conversations.find((c) => c.id === activeId) ?? null
-  const activeCollection = collections.find((c) => c.id === activeCollectionId) ?? null
+  const chat = useConversations(activeId)
+  const backend = useCollections(activeCollectionId)
 
-  const handleNewChat = () => {
-    const id = crypto.randomUUID()
-    setConversations((prev) => [{ id, title: 'Nouvelle conversation', messages: [] }, ...prev])
-    setActiveId(id)
-    setView('chat')
+  const activeConversation = chat.conversations.find((c) => c.id === activeId) ?? null
+  const activeCollection = backend.collections.find((c) => c.id === activeCollectionId) ?? null
+  const error = chat.error ?? backend.error
+  const clearError = chat.error ? chat.clearError : backend.clearError
+
+  const handleSend = async (content: string) => {
+    const id = await chat.send(content)
+    // First message from the empty /chat page: the conversation now exists, move to its URL.
+    if (id && id !== activeId) navigate(`/chat/${id}`)
   }
 
-  const handleSelectConversation = (id: string) => {
-    setActiveId(id)
-    setView('chat')
+  const handleDeleteConversation = async (id: string) => {
+    await chat.remove(id)
+    // Deleting the open conversation leaves its URL dangling: go back to the empty chat.
+    if (id === activeId) navigate('/chat', { replace: true })
   }
 
-  const handleSelectCollection = (id: string) => {
-    setActiveCollectionId(id)
-    setView('collection-detail')
-  }
-
-  const handleFilesSelected = (fileList: globalThis.FileList) => {
-    if (!activeCollectionId) return
-    const now = new Date().toISOString()
-    const newFiles: SpreadsheetFile[] = Array.from(fileList).map((file) => ({
-      id: crypto.randomUUID(),
-      name: file.name,
-      sizeBytes: file.size,
-      uploadedAt: now,
-      updatedAt: now,
-      status: 'pending',
-    }))
-    setCollections((prev) =>
-      prev.map((c) => (c.id === activeCollectionId ? { ...c, files: [...c.files, ...newFiles] } : c)),
-    )
-  }
-
-  const updateFileStatus = (fileId: string, status: SpreadsheetFile['status']) => {
-    setCollections((prev) =>
-      prev.map((c) => ({
-        ...c,
-        files: c.files.map((f) => (f.id === fileId ? { ...f, status, updatedAt: new Date().toISOString() } : f)),
-      })),
-    )
-  }
-
-  const handleRetryAnalysis = (fileId: string) => updateFileStatus(fileId, 'processing')
-
-  const handleStopAnalysis = (fileId: string) => updateFileStatus(fileId, 'stopped')
-
-  const handleDeleteFile = (fileId: string) => {
-    setCollections((prev) => prev.map((c) => ({ ...c, files: c.files.filter((f) => f.id !== fileId) })))
-  }
-
-  const handleSend = (content: string) => {
-    if (!activeId) return
-    const message: Message = { id: crypto.randomUUID(), role: 'user', content }
-    setConversations((prev) =>
-      prev.map((c) => (c.id === activeId ? { ...c, messages: [...c.messages, message] } : c)),
-    )
-  }
+  const handleFilesSelected = (fileList: globalThis.FileList) => backend.uploadFiles(Array.from(fileList))
 
   return (
     <div className="flex h-full flex-1 flex-col">
       <AppHeader />
       <SidebarProvider className="min-h-0 flex-1" style={{ transform: 'translateZ(0)' }}>
         <AppSidebar
-          conversations={conversations}
+          conversations={chat.conversations}
           activeId={activeId}
-          onSelect={handleSelectConversation}
-          onNewChat={handleNewChat}
-          isCollectionsActive={view !== 'chat'}
-          onShowCollections={() => setView('collections')}
+          onSelect={(id) => navigate(`/chat/${id}`)}
+          onNewChat={() => navigate('/chat')}
+          onDelete={handleDeleteConversation}
+          isCollectionsActive={pathname.startsWith('/collections')}
+          onShowCollections={() => navigate('/collections')}
         />
         <SidebarInset>
-          {view === 'collections' && (
-            <CollectionsListView collections={collections} onSelect={handleSelectCollection} />
+          {error && (
+            <div
+              role="alert"
+              className="flex items-center justify-between gap-2 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+            >
+              <span>{error}</span>
+              <button type="button" className="underline" onClick={clearError}>
+                Fermer
+              </button>
+            </div>
           )}
-          {view === 'collection-detail' && (
-            <CollectionDetailView
-              collection={activeCollection}
-              onFilesSelected={handleFilesSelected}
-              onRetry={handleRetryAnalysis}
-              onStop={handleStopAnalysis}
-              onDelete={handleDeleteFile}
+          <Routes>
+            <Route path="/" element={<Navigate to="/chat" replace />} />
+            <Route
+              path="/chat/:conversationId?"
+              element={
+                activeId && !chat.isLoading && !activeConversation ? (
+                  <Navigate to="/chat" replace />
+                ) : (
+                  <ChatView title={activeConversation?.title ?? null} messages={chat.messages} onSend={handleSend} />
+                )
+              }
             />
-          )}
-          {view === 'chat' && <ChatView conversation={activeConversation} onSend={handleSend} />}
+            <Route
+              path="/collections"
+              element={
+                <CollectionsListView
+                  collections={backend.collections}
+                  isLoading={backend.isLoading}
+                  onSelect={(id) => navigate(`/collections/${id}`)}
+                  onCreate={backend.createCollection}
+                />
+              }
+            />
+            <Route
+              path="/collections/:collectionId"
+              element={
+                !backend.isLoading && !activeCollection ? (
+                  <CollectionNotFound />
+                ) : (
+                  <CollectionDetailView
+                    collection={activeCollection}
+                    files={backend.files}
+                    isUploading={backend.isUploading}
+                    onFilesSelected={handleFilesSelected}
+                    onRetry={backend.retryAnalysis}
+                    onStop={backend.stopAnalysis}
+                    onDelete={backend.deleteFile}
+                  />
+                )
+              }
+            />
+            <Route path="*" element={<Navigate to="/chat" replace />} />
+          </Routes>
         </SidebarInset>
       </SidebarProvider>
     </div>

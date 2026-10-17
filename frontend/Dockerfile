@@ -6,6 +6,10 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+# Vite inlines VITE_* at build time: override with the public backend URL for non-local deployments
+# (--build-arg VITE_API_BASE_URL=..., empty = same origin, ingress-routed).
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN pnpm build
 
 # nginxinc/nginx-unprivileged already runs as the unprivileged `nginx` user

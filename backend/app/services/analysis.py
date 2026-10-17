@@ -25,6 +25,25 @@ class AnalysisService:
         await self.session.commit()
         return analysis
 
+    async def ensure_current(self, actor: Actor, file_id: uuid.UUID) -> Analysis:
+        """The analysis of the file's current version, queued if there is none yet (idempotent per version)."""
+        file = await self.files.get_owned(actor, file_id)
+        existing = await self.analyses.get_latest(file.id, file.version)
+        return existing if existing is not None else await self.create(actor, file_id)
+
+    async def latest_by_file(self, file_ids: list[uuid.UUID]) -> dict[uuid.UUID, Analysis]:
+        """Callers must have already checked access to these files."""
+        return await self.analyses.latest_by_files(file_ids)
+
+    async def stop_latest(self, actor: Actor, file_id: uuid.UUID) -> Analysis:
+        file = await self.files.get_owned(actor, file_id)
+        analysis = await self.analyses.get_latest(file.id, file.version)
+        if analysis is None:
+            raise NotFoundError(f"File {file_id} has no analysis")
+        if analysis.status in (AnalysisStatus.PENDING, AnalysisStatus.PROCESSING):
+            return await self._set_status(analysis.id, AnalysisStatus.STOPPED)
+        return analysis
+
     async def list_for_file(self, actor: Actor, file_id: uuid.UUID) -> list[Analysis]:
         await self.files.get(actor, file_id)
         return await self.analyses.list_by_file(file_id)

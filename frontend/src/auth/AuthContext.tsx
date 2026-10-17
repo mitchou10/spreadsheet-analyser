@@ -1,10 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { API_BASE_URL } from '../lib/api'
 import type { User } from '../types/user'
-
-// The browser talks to the backend directly (not through the Vite/nginx
-// origin): the BFF session cookie is scoped to this origin, and CORS on the
-// backend explicitly allows it (see KeycloakSettings.FRONTEND_URL).
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
 interface AuthMe {
   user_id: string

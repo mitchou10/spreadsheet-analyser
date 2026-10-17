@@ -35,7 +35,9 @@ class Analysis(Base):
     # <collection_id>/<file_id>/versions/<file_version>/analyse.json - only set once the analysis is READY.
     s3_key: Mapped[str | None] = mapped_column(String(1024), default=None)
     error: Mapped[str | None] = mapped_column(String(2048), default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # clock_timestamp(), not now(): now() is frozen for a whole transaction, and "latest analysis" is
+    # decided by created_at, so two analyses queued in one transaction must still be ordered.
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
