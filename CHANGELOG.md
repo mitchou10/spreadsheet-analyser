@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.1.0...v0.2.0) (2026-10-17)
+
+
+### Features
+
+* add asynchronous assistant runs executed by the worker ([6db4363](https://github.com/mitchou10/spreadsheet-analyser/commit/6db436374df97c6f70fcd9323f860433f5ed0173))
+* add BFF auth with Keycloak (PKCE + Redis sessions) for backend and frontend ([cb01591](https://github.com/mitchou10/spreadsheet-analyser/commit/cb01591bb93414dba58aafa7a0fe30227c0e7d0a))
+* add ChatGPT-style UI with Tailwind, shadcn/ui and collections management ([a28c9b9](https://github.com/mitchou10/spreadsheet-analyser/commit/a28c9b9d40fb7fe376b2a53a83eebd347af161b5))
+* add data model, async repositories/services and S3 (RustFS) storage ([e746056](https://github.com/mitchou10/spreadsheet-analyser/commit/e7460565e0c0d3ac46ec3e137f844d195b7e0928))
+* add LangGraph plan-then-answer agent and authenticated backend client in the worker ([7173772](https://github.com/mitchou10/spreadsheet-analyser/commit/71737727e9a6cc596490067d37219ae82f0be497))
+* administration page to see and manage who has access to what ([b68bece](https://github.com/mitchou10/spreadsheet-analyser/commit/b68becebe3ea3eab6e9a74d3e1622641d358c11f))
+* connect frontend to backend (collections, upload, conversations) with routing ([6dce078](https://github.com/mitchou10/spreadsheet-analyser/commit/6dce078aa9f6805ad565ba098d4a171c894e2060))
+* model selection per conversation with chat-capable model discovery ([ca10658](https://github.com/mitchou10/spreadsheet-analyser/commit/ca106588819adb9bccda7edd12d4d3b66c623e50))
+* spreadsheet analysis worker and analysis search tools for the agent ([595da50](https://github.com/mitchou10/spreadsheet-analyser/commit/595da500d6794d074a0fac92676a5830cff20544))
+
 ## [0.2.0-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.1.0...v0.2.0-rc) (2026-10-17)
 
 

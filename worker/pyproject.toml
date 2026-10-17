@@ -1,6 +1,6 @@
 [project]
 name = "worker"
-version = "0.2.0-rc"
+version = "0.2.0"
 description = "spreadsheet-analyser background worker"
 requires-python = ">=3.12"
 dependencies = [
