@@ -91,6 +91,10 @@ class BackendClient:
     def fail(self, run_id: str, error: str) -> dict:
         return self._request("POST", f"/runs/{run_id}/fail", {"error": error})
 
+    def account(self, run_id: str) -> dict:
+        """Everything the requester can read: [{collection_id, name, is_owner, shared_with, files: [...]}]."""
+        return self._request("GET", f"/runs/{run_id}/account")
+
     def run_files(self, run_id: str) -> list[dict]:
         """Files the run's agent may look at, each with its latest analysis state and the S3 key of
         analyse.json once ready: [{file_id, file_name, collection_name, version, analysis_status, result_key...}]"""

@@ -114,7 +114,16 @@ def tool_call(name: str, call_id: str = "c1", **args) -> AIMessage:
     return AIMessage(content="", tool_calls=[{"name": name, "args": args, "id": call_id}])
 
 
-def make_client(calls: list, *, history=HISTORY, scope=SCOPE, start_status=200, complete_status=200):
+def make_client(
+    calls: list,
+    *,
+    history=HISTORY,
+    scope=SCOPE,
+    start_status=200,
+    complete_status=200,
+    account=None,
+    account_status=200,
+):
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append((request.method, request.url.path, request.read().decode(), request.headers["authorization"]))
         path = request.url.path
@@ -125,6 +134,8 @@ def make_client(calls: list, *, history=HISTORY, scope=SCOPE, start_status=200, 
                 200,
                 json={"run_id": "r1", "conversation_id": "c1", "model": "gpt-x", "requester_email": "marie@example.fr"},
             )
+        if path.endswith("/runs/r1/account"):
+            return httpx.Response(account_status, json=account if account_status == 200 else {"detail": "boom"})
         if path.endswith("/runs/r1/files"):
             return httpx.Response(200, json=scope)
         if path.endswith("/conversations/c1/messages"):
@@ -193,6 +204,8 @@ def test_agent_plans_first_then_answers_the_last_message_with_history() -> None:
         "search_values",
         "describe_sheet",
         "describe_column",
+        "account_overview",
+        "account_files",
     }
 
 
@@ -288,6 +301,74 @@ def test_an_answer_without_tool_calls_has_an_empty_list_of_steps() -> None:
     assert run(make_client(calls), FakeLLM("plan", "Salut")) == "completed"
 
     assert last_body(calls)["trace"]["steps"] == []
+
+
+ACCOUNT = {
+    "truncated": False,
+    "collections": [
+        {
+            "collection_id": "col1",
+            "name": "Commercial",
+            "description": None,
+            "created_at": "2026-09-01T10:00:00+00:00",
+            "is_owner": True,
+            "shared_with": 1,
+            "files": [
+                {
+                    "file_id": "id-1",
+                    "name": "ventes_2024.xlsx",
+                    "version": 1,
+                    "size_bytes": 10,
+                    "uploaded_at": "2026-10-01T10:00:00+00:00",
+                    "analysis_status": "ready",
+                }
+            ],
+        },
+        {
+            "collection_id": "col9",
+            "name": "Chez Bob",
+            "description": None,
+            "created_at": "2026-09-02T10:00:00+00:00",
+            "is_owner": False,
+            "shared_with": None,
+            "files": [],
+        },
+    ],
+}
+
+
+def test_the_agent_can_count_the_collections_and_files_of_the_account() -> None:
+    calls: list = []
+    llm = FakeLLM(
+        "plan", tool_call("account_overview"), tool_call("account_files", "c2", collection="commercial"), "ok"
+    )
+
+    assert run(make_client(calls, account=ACCOUNT), llm) == "completed"
+
+    overview, files = (json.loads(output) for output in tool_outputs(llm))
+    assert (overview["owned_collections"], overview["shared_with_me_collections"], overview["files"]) == (1, 1, 1)
+    assert [f["file"] for f in files["files"]] == ["ventes_2024.xlsx"]
+    assert paths(calls).count("/runs/r1/account") == 1  # asked once, used twice
+    trace = last_body(calls)["trace"]
+    assert [s["tool"] for s in trace["steps"]] == ["account_overview", "account_files"]
+
+
+def test_the_account_is_not_asked_to_the_backend_unless_the_agent_needs_it() -> None:
+    calls: list = []
+
+    assert run(make_client(calls, account=ACCOUNT), FakeLLM("plan", tool_call("search", query="montant"), "ok")) == (
+        "completed"
+    )
+
+    assert "/runs/r1/account" not in paths(calls)
+
+
+def test_an_account_the_backend_cannot_give_is_reported_to_the_model_as_unavailable() -> None:
+    llm = FakeLLM("plan", tool_call("account_overview"), "Je ne peux pas le savoir pour le moment.")
+
+    assert run(make_client([], account=ACCOUNT, account_status=500), llm) == "completed"
+
+    assert "information indisponible" in tool_outputs(llm)[0]
 
 
 def test_a_tool_error_is_given_back_to_the_model_not_raised() -> None:
