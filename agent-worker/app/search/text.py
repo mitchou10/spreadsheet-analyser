@@ -3,6 +3,10 @@
 import re
 import unicodedata
 
+# Bump whenever tokenisation changes (stop words, stemming, synonyms, folding): a persisted search index
+# built with another version is ignored by the agent, which then falls back to indexing in memory.
+TOKENIZER_VERSION = 1
+
 STOPWORDS = frozenset(
     "le la les l de du des d un une et ou the of and a to in en pour par sur dans quel quelle quels quelles est "
     "sont au aux avec ce cette ces qui que quoi where what which is are for with ma mon mes je tu il nous vous "
