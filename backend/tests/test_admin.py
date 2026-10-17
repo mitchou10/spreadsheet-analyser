@@ -195,3 +195,26 @@ async def test_admin_can_ask_for_a_search_index_rebuild(api, dispatcher) -> None
 
     dispatcher.fail = True
     assert (await api.post(url)).status_code == 503
+
+
+async def test_admin_grants_and_revocations_refresh_the_index_of_that_person(session, dispatcher, world) -> None:
+    sales, _, _ = world
+    admin = AdminService(session, dispatcher)
+
+    await admin.grant(BOB, sales.id, " New@Example.org ")
+    await admin.revoke(sales.id, "NEW@example.org")
+
+    assert dispatcher.user_rebuilds == ["new@example.org", "new@example.org"]
+
+
+async def test_admin_can_ask_for_a_person_s_index_to_be_rebuilt(api, dispatcher) -> None:
+    login_as(admin=False)
+    assert (await api.post("/api/admin/users/search-index", json={"email": "marie@example.fr"})).status_code == 403
+
+    login_as(admin=True)
+    assert (await api.post("/api/admin/users/search-index", json={"email": " Marie@Example.fr "})).status_code == 202
+    assert dispatcher.user_rebuilds == ["marie@example.fr"]
+    assert (await api.post("/api/admin/users/search-index", json={"email": "not-an-email"})).status_code == 422
+
+    dispatcher.fail = True
+    assert (await api.post("/api/admin/users/search-index", json={"email": "marie@example.fr"})).status_code == 503

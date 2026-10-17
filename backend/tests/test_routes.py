@@ -552,3 +552,37 @@ async def test_a_refused_file_deletion_does_not_touch_the_search_index(client, d
     assert (await client.delete(f"/api/files/{file['id']}")).status_code == 403
 
     assert dispatcher.forgotten == []
+
+
+async def test_internal_collection_audience_and_user_collections_feed_the_index_worker(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    collection = await _create(client)
+    await client.post(f"/api/collections/{collection['id']}/access", json={"email": BOB.email})
+    audience_url = f"/api/internal/collections/{collection['id']}/audience"
+    assert (await client.get(audience_url)).status_code == 401
+
+    audience = (await client.get(audience_url, headers=worker)).json()
+    assert audience == {"collection_id": collection["id"], "owner_email": "dev@example.com", "emails": [BOB.email]}
+    missing = "/api/internal/collections/00000000-0000-0000-0000-000000000000/audience"
+    assert (await client.get(missing, headers=worker)).status_code == 404
+
+    url = "/api/internal/users/collections"
+    assert (await client.get(url, params={"email": BOB.email})).status_code == 401
+    assert (await client.get(url, params={"email": BOB.email}, headers=worker)).json() == {
+        "collection_ids": [collection["id"]]
+    }
+    owner = (await client.get(url, params={"email": "DEV@example.com"}, headers=worker)).json()["collection_ids"]
+    assert collection["id"] in owner
+    assert (await client.get(url, params={"email": "nobody@example.com"}, headers=worker)).json() == {
+        "collection_ids": []
+    }
+
+
+async def test_sharing_over_http_refreshes_the_index_of_the_person(client, dispatcher) -> None:
+    collection = await _create(client)
+
+    await client.post(f"/api/collections/{collection['id']}/access", json={"email": BOB.email})
+    await client.delete(f"/api/collections/{collection['id']}/access/{BOB.email}")
+
+    assert dispatcher.user_rebuilds == [BOB.email, BOB.email]

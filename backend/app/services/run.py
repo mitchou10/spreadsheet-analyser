@@ -29,6 +29,7 @@ class RunContext:
     run_id: uuid.UUID
     conversation_id: uuid.UUID
     user_id: str
+    requester_email: str | None  # lets the agent find the person's own saved search index
     model: str | None
     messages: list[dict]  # [{"role", "content"}] of the conversation, oldest first
     collection_ids: list[uuid.UUID]  # scope the user picked on the triggering message
@@ -85,6 +86,9 @@ class RunService:
         if await self.runs.get_active_for_conversation(conversation.id) is not None:
             raise ConflictError("The assistant is still answering the previous message")
         collections, files = await self.conversations.readable_scope(actor, collection_ids, file_ids)
+        owner_email = normalize_email(actor.email)
+        # Collections created before emails were recorded are attributed to their owner the first time they ask.
+        backfilled = bool(owner_email) and await self.collections.backfill_owner_email(actor.user_id, owner_email)
         if model:
             conversation.model = model
 
@@ -101,6 +105,12 @@ class RunService:
         )
         await self.session.commit()
         await self.session.refresh(conversation)
+
+        if backfilled:
+            try:
+                await self.dispatcher.enqueue_user_index_rebuild(owner_email)
+            except Exception:
+                logger.exception("Could not enqueue the rebuild of a user's search index")
 
         # After the commit: the worker must be able to see the run as soon as it receives the task.
         try:
@@ -148,6 +158,7 @@ class RunService:
             run_id=run.id,
             conversation_id=run.conversation_id,
             user_id=conversation.user_id,
+            requester_email=run.requester_email,
             model=run.model,
             messages=[{"role": m.role.value, "content": m.content} for m in history if m.content],
             collection_ids=[c.id for c in trigger.collections],
