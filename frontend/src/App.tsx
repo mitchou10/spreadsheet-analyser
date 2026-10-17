@@ -1,36 +1,29 @@
-import './App.css'
+import { Button } from '@/components/ui/button'
 import { useCurrentUser } from './auth/AuthContext'
+import { AppHeader } from './components/layout/AppHeader'
+import { AppShell } from './components/layout/AppShell'
 
 function App() {
-  const { user, isAuthenticated, isLoading, login, logout } = useCurrentUser()
+  const { isAuthenticated, isLoading, login } = useCurrentUser()
 
   if (isLoading) return null
 
   if (!isAuthenticated) {
     return (
-      <section id="center">
-        <div>
-          <h1>spreadsheet-analyser</h1>
-          <p>Sign in with your account to continue.</p>
-        </div>
-        <button type="button" className="counter" onClick={() => login()}>
-          Log in
-        </button>
-      </section>
+      <div className="flex h-full flex-1 flex-col">
+        <AppHeader />
+        <section className="flex flex-1 flex-col items-center justify-center gap-6 p-8 text-center">
+          <div>
+            <h1 className="text-2xl font-semibold">spreadsheet-analyser</h1>
+            <p className="text-muted-foreground">Connectez-vous pour analyser vos fichiers tableurs.</p>
+          </div>
+          <Button onClick={() => login()}>Se connecter</Button>
+        </section>
+      </div>
     )
   }
 
-  return (
-    <section id="center">
-      <div>
-        <h1>Welcome, {user?.name}</h1>
-        <p>{user?.email}</p>
-      </div>
-      <button type="button" className="counter" onClick={() => logout()}>
-        Log out
-      </button>
-    </section>
-  )
+  return <AppShell />
 }
 
 export default App
