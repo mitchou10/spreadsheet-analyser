@@ -8,7 +8,7 @@ from app.repositories import FileRepository
 from app.services.actor import Actor
 from app.services.collection import CollectionService
 from app.services.errors import NotFoundError
-from app.services.storage import StorageService, file_key, sanitize_file_name
+from app.services.storage import StorageService, base_of, file_key, sanitize_file_name, version_key
 
 
 class FileService:
@@ -38,7 +38,11 @@ class FileService:
 
         file_id = file.id if file else uuid.uuid4()
         version = file.version + 1 if file else 1
-        key = file_key(collection_id, file_id, version, file_name)
+        key = (
+            version_key(file.s3_key, version, file_name)
+            if file is not None
+            else file_key(collection_id, file_id, version, file_name)
+        )
 
         await self.storage.put_object(key, content, content_type)
         try:
@@ -92,7 +96,7 @@ class FileService:
 
     async def delete(self, actor: Actor, file_id: uuid.UUID) -> File:
         file = await self.get_owned(actor, file_id)
-        prefix = f"{file.collection_id}/{file.id}/"
+        prefix = base_of(file.s3_key) + "/"  # the layout the file was created with
         await self.files.delete(file)
         await self.session.commit()
         await self.storage.delete_prefix(prefix)

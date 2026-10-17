@@ -9,7 +9,7 @@ from app.services.access import CollectionAccessPolicy
 from app.services.actor import Actor, normalize_email
 from app.services.dispatcher import RunDispatcher
 from app.services.errors import ForbiddenError, NotFoundError
-from app.services.storage import StorageService
+from app.services.storage import StorageService, collection_prefix, legacy_collection_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,8 @@ class CollectionService:
         await self.collections.delete(collection)
         await self.session.commit()
         # After the commit: a failed S3 cleanup leaves orphan objects, never dangling DB rows.
-        await self.storage.delete_prefix(f"{collection_id}/")
+        for prefix in dict.fromkeys([collection_prefix(collection_id), legacy_collection_prefix(collection_id)]):
+            await self.storage.delete_prefix(prefix)
         await self.user_indexes_changed(readers)  # the collection's index went with its S3 prefix
 
     # --- Sharing (owner only) ---
