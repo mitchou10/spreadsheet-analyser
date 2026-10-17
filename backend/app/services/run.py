@@ -308,7 +308,9 @@ class RunService:
         if run.status != RunStatus.RUNNING:
             raise ConflictError(f"Run {run_id} is {run.status}, not running")
         conversation = await self.conversations.conversations.get(run.conversation_id)
-        reply = await self.conversations.stage_message(conversation, MessageRole.ASSISTANT, content, trace=trace)
+        reply = await self.conversations.stage_message(
+            conversation, MessageRole.ASSISTANT, content, trace=trace, message_id=run.answer_message_id
+        )
         run.result_message_id = reply.id
         return await self._finish(run, RunStatus.COMPLETED)
 

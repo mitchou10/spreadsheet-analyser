@@ -1,6 +1,7 @@
 from app.models.access_collection import AccessCollection
 from app.models.analysis import Analysis, AnalysisStatus
 from app.models.base import Base
+from app.models.chart import Chart, ChartStatus
 from app.models.collection import Collection
 from app.models.conversation import DEFAULT_CONVERSATION_TITLE, Conversation, ConversationStatus
 from app.models.file import File
@@ -19,6 +20,8 @@ __all__ = [
     "Analysis",
     "AnalysisStatus",
     "Base",
+    "Chart",
+    "ChartStatus",
     "Collection",
     "Conversation",
     "ConversationStatus",

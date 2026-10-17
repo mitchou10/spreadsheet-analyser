@@ -1,9 +1,9 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.dependencies import ActorDep, ConversationServiceDep, ModelCatalogDep, RunServiceDep
+from app.dependencies import ActorDep, ChartServiceDep, ConversationServiceDep, ModelCatalogDep, RunServiceDep
 from app.models import Message
 from app.schemas import (
     ConversationCreate,
@@ -128,3 +128,22 @@ async def send_message(
 async def get_active_run(conversation_id: uuid.UUID, actor: ActorDep, service: RunServiceDep) -> RunOut | None:
     run = await service.get_active(actor, conversation_id)
     return RunOut.model_validate(run) if run else None
+
+
+@router.get(
+    "/{conversation_id}/messages/{message_id}/charts/{chart_id}",
+    summary="The image of a chart of an answer (PNG), only for the owner of the conversation",
+    response_class=Response,
+    responses={200: {"content": {"image/png": {}}}},
+)
+async def get_chart_image(
+    conversation_id: uuid.UUID, message_id: uuid.UUID, chart_id: uuid.UUID, actor: ActorDep, charts: ChartServiceDep
+) -> Response:
+    """Charts live in S3 but are never linked to directly: they are served here, behind the same session as the
+    rest of the conversation. The content of a chart never changes, so it can be cached by the browser."""
+    image = await charts.read_image(actor, conversation_id, message_id, chart_id)
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={"Cache-Control": "private, max-age=86400, immutable", "X-Content-Type-Options": "nosniff"},
+    )
