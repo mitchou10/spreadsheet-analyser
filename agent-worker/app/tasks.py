@@ -6,6 +6,21 @@ from app.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 
+# Bounds accepted by the backend for a trace.
+MAX_TRACE_STEPS = 50
+MAX_TRACE_FILES = 200
+MAX_TRACE_PLAN_CHARS = 8000
+
+
+def _trace(result: dict) -> dict:
+    """What the agent worked from, for the backend to store with the answer."""
+    return {
+        "plan": (result.get("plan") or "")[:MAX_TRACE_PLAN_CHARS],
+        "files": result.get("files", [])[:MAX_TRACE_FILES],
+        "steps": result.get("trace_steps", [])[:MAX_TRACE_STEPS],
+    }
+
+
 @celery_app.task(name="worker.run_agent")
 def run_agent(run_id: str, client: BackendClient | None = None, llm=None, storage=None) -> str:
     """Executes one assistant run: queued -> running -> completed/failed, reporting through the backend.
@@ -34,7 +49,7 @@ def run_agent(run_id: str, client: BackendClient | None = None, llm=None, storag
             user_email=context.get("requester_email"),
         )
         result = graph.invoke({"conversation_id": context["conversation_id"]})
-        client.complete(run_id, result["answer"])
+        client.complete(run_id, result["answer"], _trace(result))
     except RunConflict:
         logger.info("Run %s was cancelled while running, discarding the reply", run_id)
         return "cancelled"
