@@ -96,7 +96,8 @@ class SqlRunner:
         if query["status"] == "failed":
             tables = query.get("available_tables") or []
             raise CatalogError(f"{query['error'].rstrip('. ')}. Tables disponibles : {_tables_text(tables)}.")
-        return self._result(query["result"])
+        # The id lets the agent draw a chart of this result (create_chart): a chart is always made from a query.
+        return {"query_id": query["id"], **self._result(query["result"])}
 
     @staticmethod
     def _result(result: dict) -> dict:
