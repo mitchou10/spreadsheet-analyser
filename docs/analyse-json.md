@@ -11,6 +11,7 @@ Code : `analysis-worker/app/analysis/` (`readers.py` lit les fichiers, `profile.
 ```
 <projet>/<collection_id>/<file_id>/versions/<version>/<nom-du-fichier>   le fichier brut importé
 <projet>/<collection_id>/<file_id>/versions/<version>/analyse.json       le profil décrit ici
+<projet>/<collection_id>/<file_id>/versions/<version>/tables/<n>.parquet    une copie typée de la feuille n (pour le SQL)
 ```
 
 `<projet>` est le premier niveau de toutes les clés S3 (`S3_KEY_PREFIX`, `spreadsheet-analyser` par défaut) : un même
@@ -20,8 +21,9 @@ retrouver ses versions et son `analyse.json`.
 
 - Une analyse porte sur **une version** du fichier. Importer une nouvelle version crée une nouvelle analyse,
   l'`analyse.json` des versions précédentes reste en place.
-- Le worker écrit l'objet, puis prévient le backend, qui ne l'accepte que s'il est exactement à la clé attendue.
-  La clé est aussi enregistrée dans `analyses.s3_key`.
+- Le worker écrit les Parquet puis `analyse.json`, et prévient le backend, qui ne l'accepte que si `analyse.json` est
+  exactement à la clé attendue : une analyse prête a donc toujours ses tables. La clé est aussi enregistrée dans
+  `analyses.s3_key`. La clé d'une table se déduit de celle d'`analyse.json` (même dossier, `tables/<n>.parquet`).
 - Le résultat se lit via l'API : `GET /api/files/{file_id}/analysis` renvoie le statut (`pending`, `processing`,
   `ready`, `error`, `stopped`), l'erreur éventuelle et le contenu d'`analyse.json` dans `result` (null tant que
   l'analyse n'est pas `ready`).
@@ -65,6 +67,7 @@ analyse.json
 | `header_detected` | `true` si la première ligne a été reconnue comme un en-tête. |
 | `truncated` | `true` si la feuille dépasse la limite de lignes : seules les premières ont été analysées. |
 | `columns` | Profil de chaque colonne, voir ci-dessous. |
+| `table` | Présent quand la feuille a des lignes et des colonnes : `rows` (lignes écrites) et `columns` (`name`, `sql_type`) de sa copie Parquet, voir [sql-queries.md](sql-queries.md). |
 | `preview` | Les 10 premières lignes de données (valeurs vides = `null`, dates en ISO 8601). |
 | `warnings` | Par exemple `"Only the first 500 columns were analyzed"`. |
 
