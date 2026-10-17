@@ -95,7 +95,7 @@ class SqlRunner:
             query = self.client.get_query(query["id"])
         if query["status"] == "failed":
             tables = query.get("available_tables") or []
-            raise CatalogError(f"{query['error']}. Tables disponibles : {_tables_text(tables)}.")
+            raise CatalogError(f"{query['error'].rstrip('. ')}. Tables disponibles : {_tables_text(tables)}.")
         return self._result(query["result"])
 
     @staticmethod
