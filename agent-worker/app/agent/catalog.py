@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 
 from app.search.docs import FIELD_WEIGHTS, build_file_docs, column_brief, sheet_summary
 from app.search.engine import Doc, Hit, Index
-from app.search.index_file import IndexFormatError, SearchIndex, index_key
+from app.search.index_file import IndexFormatError, SearchIndex, index_key, user_index_key
 from app.search.text import canon
 
 logger = logging.getLogger(__name__)
@@ -77,26 +77,51 @@ class Catalog:
     # --- building ---
 
     @classmethod
-    def load(cls, scope: list[dict], storage, max_bytes: int = 20 * 1024 * 1024) -> "Catalog":
-        """`scope` is the backend's list of files (with the S3 key of each ready analysis)."""
-        saved = cls._load_saved_indexes(scope, storage)
+    def load(
+        cls, scope: list[dict], storage, max_bytes: int = 20 * 1024 * 1024, user_email: str | None = None
+    ) -> "Catalog":
+        """`scope` is the backend's list of files (with the S3 key of each ready analysis); `user_email` is the
+        person asking, whose own index covers everything they can read.
+
+        Each file is served from the first saved index that holds an up-to-date copy of it: the person's index
+        (when the scope spans several collections), then its collection's index. Whatever is left is indexed in
+        memory from its analyse.json."""
+        ready = [meta for meta in scope if meta.get("result_key")]
+        sources: list[SearchIndex] = []
+        provider: dict[str, SearchIndex] = {}  # file id -> the saved index that serves it
+
+        def assign() -> None:
+            for meta in ready:
+                file_id = str(meta["file_id"])
+                if file_id not in provider:
+                    fresh = next((src for src in sources if src.is_fresh(file_id, meta["result_key"])), None)
+                    if fresh is not None:
+                        provider[file_id] = fresh
+
+        collections = {str(meta["collection_id"]) for meta in ready}
+        if user_email and len(collections) >= 2:
+            user_index = cls._load_saved(storage, user_index_key(user_email), "the user")
+            if user_index is not None:
+                sources.append(user_index)
+                assign()
+        for collection_id in sorted({str(m["collection_id"]) for m in ready if str(m["file_id"]) not in provider}):
+            collection_index = cls._load_saved(storage, index_key(collection_id), f"collection {collection_id}")
+            if collection_index is not None:
+                sources.append(collection_index)
+        assign()
+
         entries: list[FileEntry] = []
         fallback_docs: list[Doc] = []
-        used_saved: dict[str, SearchIndex] = {}
-        from_saved: set[str] = set()  # files whose saved documents are up to date
         for number, meta in enumerate(scope, start=1):
             entry = FileEntry(ref=f"f{number}", meta=meta, sheets=None)
             entries.append(entry)
             if not meta.get("result_key"):
                 continue
-            collection_id = str(meta["collection_id"])
-            index = saved.get(collection_id)
-            if index is not None and index.is_fresh(entry.file_id, meta["result_key"]):
-                entry.sheets = index.files[entry.file_id].sheets
-                used_saved[collection_id] = index
-                from_saved.add(entry.file_id)
+            source = provider.get(entry.file_id)
+            if source is not None:
+                entry.sheets = source.files[entry.file_id].sheets
                 continue
-            try:  # not in the saved index (yet), or an old version of it: index it here, in memory
+            try:  # not in a saved index (yet), or an old version of it: index it here, in memory
                 report = storage.get_json(meta["result_key"], max_bytes=max_bytes)
                 entry.report = report
                 entry.sheets = sheet_summary(report)
@@ -107,40 +132,38 @@ class Catalog:
                 logger.warning("Cannot load analysis of %s: %s", meta["file_name"], error)
                 entry.problem = "l'analyse est illisible"
 
-        if len(used_saved) == 1 and not fallback_docs:
-            # The common case (one collection, saved index up to date): the saved BM25 statistics are used
-            # as they are; documents of files outside the scope are filtered out at search time.
-            index = next(iter(used_saved.values())).index()
-            logger.info("Catalog: saved search index used (%d documents)", len(index.docs))
+        used = {id(source): source for source in provider.values()}
+        if len(used) == 1 and not fallback_docs:
+            # The common case (everything served by one saved index): its BM25 statistics are used as they are;
+            # documents of files outside the scope are filtered out at search time.
+            index = next(iter(used.values())).index()
+            logger.info("Catalog: one saved search index used (%d documents)", len(index.docs))
         else:
-            # Only the saved documents of files that are up to date: an older version of a file re-indexed
+            # Only the saved documents of files that this source serves: an older version of a file re-indexed
             # here, or a file out of scope, must not be served next to (or instead of) the current one.
             docs = [
-                doc
-                for saved_index in used_saved.values()
-                for doc in saved_index.docs
-                if doc.payload["file_id"] in from_saved
+                doc for source in used.values() for doc in source.docs if provider.get(doc.payload["file_id"]) is source
             ]
             index = Index(docs + fallback_docs, FIELD_WEIGHTS)
-            logger.info("Catalog: indexed in memory (%d documents, %d from saved indexes)", len(index.docs), len(docs))
+            logger.info(
+                "Catalog: indexed in memory (%d documents, %d from %d saved indexes)",
+                len(index.docs),
+                len(docs),
+                len(used),
+            )
         return cls(entries, index, storage, max_bytes)
 
     @staticmethod
-    def _load_saved_indexes(scope: list[dict], storage) -> dict[str, SearchIndex]:
-        """One read per collection that has at least one analysed file. A missing or unusable index is
-        simply absent: the agent then indexes that collection's files itself."""
-        saved: dict[str, SearchIndex] = {}
-        collection_ids = {str(meta["collection_id"]) for meta in scope if meta.get("result_key")}
-        for collection_id in sorted(collection_ids):
-            try:
-                data = storage.get_bytes(index_key(collection_id))
-                if data is not None:
-                    saved[collection_id] = SearchIndex.loads(data)
-            except IndexFormatError as error:
-                logger.warning("Ignoring the saved search index of collection %s: %s", collection_id, error)
-            except Exception as error:
-                logger.warning("Cannot read the saved search index of collection %s: %s", collection_id, error)
-        return saved
+    def _load_saved(storage, key: str, what: str) -> SearchIndex | None:
+        """A saved index, or None when it is missing or unusable: the agent then indexes the files itself."""
+        try:
+            data = storage.get_bytes(key)
+            return SearchIndex.loads(data) if data is not None else None
+        except IndexFormatError as error:
+            logger.warning("Ignoring the saved search index of %s: %s", what, error)
+        except Exception as error:
+            logger.warning("Cannot read the saved search index of %s: %s", what, error)
+        return None
 
     # --- lookups ---
 

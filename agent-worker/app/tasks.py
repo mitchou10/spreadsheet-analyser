@@ -26,7 +26,13 @@ def run_agent(run_id: str, client: BackendClient | None = None, llm=None, storag
 
     try:
         context = client.context(run_id)
-        graph = build_graph(llm or build_llm(context.get("model")), client, storage or S3Reader(), run_id)
+        graph = build_graph(
+            llm or build_llm(context.get("model")),
+            client,
+            storage or S3Reader(),
+            run_id,
+            user_email=context.get("requester_email"),
+        )
         result = graph.invoke({"conversation_id": context["conversation_id"]})
         client.complete(run_id, result["answer"])
     except RunConflict:

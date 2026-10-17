@@ -121,7 +121,10 @@ def make_client(calls: list, *, history=HISTORY, scope=SCOPE, start_status=200, 
         if path.endswith("/start"):
             return httpx.Response(start_status, json={"detail": "cancelled"})
         if path.endswith("/context"):
-            return httpx.Response(200, json={"run_id": "r1", "conversation_id": "c1", "model": "gpt-x"})
+            return httpx.Response(
+                200,
+                json={"run_id": "r1", "conversation_id": "c1", "model": "gpt-x", "requester_email": "marie@example.fr"},
+            )
         if path.endswith("/runs/r1/files"):
             return httpx.Response(200, json=scope)
         if path.endswith("/conversations/c1/messages"):
@@ -359,3 +362,18 @@ def test_the_model_picked_for_the_run_is_given_to_the_llm_builder(monkeypatch) -
     assert run_agent("r1", make_client([]), None, FakeStorage()) == "completed"
 
     assert built == [{"model": "gpt-x", "api_key": "sk-test", "base_url": "http://gateway/v1"}]
+
+
+def test_the_requesters_email_is_used_to_find_their_saved_index(monkeypatch) -> None:
+    seen: list = []
+    real_load = __import__("app.agent.catalog", fromlist=["Catalog"]).Catalog.load
+
+    def spy(scope, storage, max_bytes=20 * 1024 * 1024, user_email=None):
+        seen.append(user_email)
+        return real_load(scope, storage, max_bytes, user_email)
+
+    monkeypatch.setattr("app.agent.graph.Catalog.load", staticmethod(spy))
+
+    assert run(make_client([]), FakeLLM("plan", "answer")) == "completed"
+
+    assert seen == ["marie@example.fr"]
