@@ -90,6 +90,7 @@ export function useCollections(activeCollectionId: string | null) {
     isUploading,
     error,
     clearError: () => setError(null),
+    refreshCollections,
     createCollection,
     uploadFiles,
     retryAnalysis,

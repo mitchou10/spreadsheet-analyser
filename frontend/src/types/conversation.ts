@@ -1,3 +1,5 @@
+import type { FileAnalysisStatus } from './collection'
+
 /** How an assistant answer was produced: what it was given and what it looked up. */
 export interface MessageTrace {
   plan: string
@@ -26,7 +28,8 @@ export interface Conversation {
 export interface MessageScope {
   collections: { id: string; name: string }[]
   // A file keeps the collection it comes from, so it can be shown next to its name.
-  files: { id: string; name: string; collection: { id: string; name: string } }[]
+  // `status` is only known for a file imported from the composer, whose analysis the composer waits for.
+  files: { id: string; name: string; collection: { id: string; name: string }; status?: FileAnalysisStatus }[]
 }
 
 export const emptyScope: MessageScope = { collections: [], files: [] }

@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -12,12 +13,14 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { CollectionSummary, SpreadsheetFile } from '@/types/collection'
 import type { MessageScope } from '@/types/conversation'
-import { FileSpreadsheet, Folder, Plus } from 'lucide-react'
+import { FileSpreadsheet, Folder, Plus, Upload } from 'lucide-react'
 
 interface ScopePickerProps {
   collections: CollectionSummary[]
   scope: MessageScope
   onChange: (scope: MessageScope) => void
+  // Opens the import dialog (a new file, into one of my collections).
+  onImport: () => void
   disabled?: boolean
 }
 
@@ -26,7 +29,7 @@ type FilesState = SpreadsheetFile[] | 'loading' | 'error'
 const has = (items: { id: string }[], id: string) => items.some((item) => item.id === id)
 
 /** ChatGPT-style "+" menu: add whole collections, or only some files (grouped by their collection). */
-export function ScopePicker({ collections, scope, onChange, disabled }: ScopePickerProps) {
+export function ScopePicker({ collections, scope, onChange, onImport, disabled }: ScopePickerProps) {
   const [files, setFiles] = useState<Record<string, FilesState>>({})
 
   const loadFiles = (collectionId: string) => {
@@ -65,6 +68,10 @@ export function ScopePicker({ collections, scope, onChange, disabled }: ScopePic
         <Plus className="size-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem onClick={onImport}>
+          <Upload className="size-4" aria-hidden />
+          Importer un fichier…
+        </DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <Folder className="size-4" aria-hidden />
