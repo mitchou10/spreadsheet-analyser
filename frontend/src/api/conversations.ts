@@ -1,5 +1,5 @@
 import { apiFetch, jsonBody } from '@/lib/api'
-import type { Conversation, Message, Run, RunStatus } from '@/types/conversation'
+import type { Conversation, Message, MessageScope, Run, RunStatus } from '@/types/conversation'
 
 interface ConversationDto {
   id: string
@@ -11,6 +11,13 @@ interface MessageDto {
   id: string
   role: 'user' | 'assistant' | 'system' | 'tool'
   content: string | null
+  collections?: { id: string; name: string }[]
+  files?: { id: string; name: string; collection_id: string; collection_name: string }[]
+  trace?: {
+    plan: string
+    files: { file_id: string; file_name: string; collection_name: string }[]
+    steps: { tool: string; arguments: Record<string, unknown>; output: string }[]
+  } | null
 }
 
 interface RunDto {
@@ -24,7 +31,28 @@ const toRun = ({ id, status, error }: RunDto): Run => ({ id, status, error })
 // system/tool messages and assistant tool-call turns (no text) are plumbing for the agent, not chat bubbles.
 const toMessage = (dto: MessageDto): Message[] =>
   (dto.role === 'user' || dto.role === 'assistant') && dto.content
-    ? [{ id: dto.id, role: dto.role, content: dto.content }]
+    ? [
+        {
+          id: dto.id,
+          role: dto.role,
+          content: dto.content,
+          trace: dto.trace
+            ? {
+                plan: dto.trace.plan,
+                files: dto.trace.files.map((f) => ({ id: f.file_id, name: f.file_name, collection: f.collection_name })),
+                steps: dto.trace.steps,
+              }
+            : null,
+          scope: {
+            collections: dto.collections ?? [],
+            files: (dto.files ?? []).map((f) => ({
+              id: f.id,
+              name: f.name,
+              collection: { id: f.collection_id, name: f.collection_name },
+            })),
+          },
+        },
+      ]
     : []
 
 export const listConversations = async (): Promise<Conversation[]> =>
@@ -40,14 +68,42 @@ export const createConversation = async (): Promise<Conversation> => {
 
 export const deleteConversation = (id: string) => apiFetch<void>(`/conversations/${id}`, { method: 'DELETE' })
 
-export const listMessages = async (conversationId: string): Promise<Message[]> =>
-  (await apiFetch<MessageDto[]>(`/conversations/${conversationId}/messages`)).flatMap(toMessage)
+export const MESSAGES_PAGE_SIZE = 30
+
+export interface MessagePage {
+  // Oldest first. Only the messages shown as bubbles (see toMessage).
+  items: Message[]
+  // Older messages exist: ask again with `cursor`.
+  hasMore: boolean
+  // Id of the oldest message of the page as stored (whether or not it is a bubble): the `before` of the next page.
+  cursor: string | null
+}
+
+/** The latest page, or the one just before the message `before`. */
+export async function listMessages(conversationId: string, before?: string): Promise<MessagePage> {
+  const query = new URLSearchParams({ limit: String(MESSAGES_PAGE_SIZE) })
+  if (before) query.set('before', before)
+  const page = await apiFetch<{ items: MessageDto[]; has_more: boolean }>(
+    `/conversations/${conversationId}/messages?${query}`,
+  )
+  return { items: page.items.flatMap(toMessage), hasMore: page.has_more, cursor: page.items[0]?.id ?? null }
+}
 
 /** Stores the user message and queues the assistant's run; the answer arrives later (poll the run). */
-export async function sendMessage(conversationId: string, content: string, model?: string): Promise<{ messages: Message[]; run: Run }> {
+export async function sendMessage(
+  conversationId: string,
+  content: string,
+  model?: string,
+  scope?: MessageScope,
+): Promise<{ messages: Message[]; run: Run }> {
   const sent = await apiFetch<{ message: MessageDto; run: RunDto }>(`/conversations/${conversationId}/messages`, {
     method: 'POST',
-    body: jsonBody({ content, model: model ?? null }),
+    body: jsonBody({
+      content,
+      model: model ?? null,
+      collection_ids: scope?.collections.map((c) => c.id) ?? [],
+      file_ids: scope?.files.map((f) => f.id) ?? [],
+    }),
   })
   return { messages: toMessage(sent.message), run: toRun(sent.run) }
 }

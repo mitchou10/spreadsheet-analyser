@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes, useLocation, useMatch, useNavigate } fro
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useCollections } from '@/hooks/useCollections'
 import { useConversations } from '@/hooks/useConversations'
+import type { MessageScope } from '@/types/conversation'
 import { useModels } from '@/hooks/useModels'
 import { useCurrentUser } from '@/auth/AuthContext'
 import { useState } from 'react'
@@ -57,9 +58,9 @@ export function AppShell() {
   const error = chat.error ?? backend.error
   const clearError = chat.error ? chat.clearError : backend.clearError
 
-  const handleSend = async (content: string) => {
+  const handleSend = async (content: string, scope: MessageScope) => {
     // Sent with every message: the backend remembers it as the conversation's model.
-    const id = await chat.send(content, selectedModel ?? undefined)
+    const id = await chat.send(content, selectedModel ?? undefined, scope)
     if (id) setPick(null)
     // First message from the empty /chat page: the conversation now exists, move to its URL.
     if (id && id !== activeId) navigate(`/chat/${id}`)
@@ -88,7 +89,7 @@ export function AppShell() {
           isAdminActive={pathname.startsWith('/admin')}
           onShowAdmin={() => navigate('/admin')}
         />
-        <SidebarInset>
+        <SidebarInset className="min-h-0 overflow-hidden">
           {error && (
             <div
               role="alert"
@@ -109,14 +110,19 @@ export function AppShell() {
                   <Navigate to="/chat" replace />
                 ) : (
                   <ChatView
+                    conversationId={activeId}
                     title={activeConversation?.title ?? null}
                     messages={chat.messages}
+                    hasOlder={chat.hasOlder}
+                    isLoadingOlder={chat.isLoadingOlder}
+                    onLoadOlder={chat.loadOlder}
                     models={modelsList.models}
                     modelsLoading={modelsList.isLoading}
                     modelsError={modelsList.error}
                     selectedModel={selectedModel}
                     onModelChange={(model) => setPick({ conversationId: activeId, model })}
                     isAnswering={chat.isAnswering}
+                    collections={backend.collections}
                     onSend={handleSend}
                     onCancel={chat.cancel}
                   />
