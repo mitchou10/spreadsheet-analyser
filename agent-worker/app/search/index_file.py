@@ -5,6 +5,7 @@ BM25 statistics computed over all of them. The analysis worker updates it whenev
 the agent loads it with a single read instead of reading every analyse.json and indexing them again."""
 
 import gzip
+import hashlib
 import io
 import json
 from dataclasses import dataclass, field
@@ -19,6 +20,13 @@ SCHEMA_VERSION = 1
 
 def index_key(collection_id: str) -> str:
     return f"{collection_id}/search-index.json.gz"
+
+
+def user_index_key(email: str) -> str:
+    """The index of everything a person can read, across collections. Keyed by a hash of the (normalised) email:
+    safe in an object name, and nobody's address ends up in a listing of the bucket."""
+    digest = hashlib.sha256(email.strip().lower().encode()).hexdigest()
+    return f"users/{digest}/search-index.json.gz"
 
 
 class IndexFormatError(ValueError):
@@ -57,6 +65,14 @@ class SearchIndex:
         self.docs = [doc for doc in self.docs if doc.payload["file_id"] != file_id]
         self._index = None
         return True
+
+    def extend(self, other: "SearchIndex") -> None:
+        """Adds all the files and documents of another index (file ids are unique across collections)."""
+        for file_id in other.files:
+            self.remove(file_id)
+        self.files.update(other.files)
+        self.docs.extend(other.docs)
+        self._index = None
 
     def is_fresh(self, file_id: str, result_key: str) -> bool:
         indexed = self.files.get(file_id)

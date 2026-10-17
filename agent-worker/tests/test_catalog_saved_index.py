@@ -3,7 +3,7 @@ import json
 
 from app.agent.catalog import Catalog
 from app.search.docs import build_file_docs, sheet_summary
-from app.search.index_file import IndexedFile, SearchIndex, index_key
+from app.search.index_file import IndexedFile, SearchIndex, index_key, user_index_key
 from app.search.text import TOKENIZER_VERSION
 from tests.test_catalog import FakeStorage, build, column, entry, sheet
 
@@ -46,10 +46,10 @@ def reads_of(storage_holder) -> list[str]:
     return storage_holder.reads
 
 
-def load(entries, blobs=None) -> tuple[Catalog, FakeStorage]:
+def load(entries, blobs=None, user_email=None) -> tuple[Catalog, FakeStorage]:
     reports = {meta["result_key"]: report for meta, report in entries if report is not None}
     storage = FakeStorage(reports, blobs)
-    return Catalog.load([meta for meta, _ in entries], storage), storage
+    return Catalog.load([meta for meta, _ in entries], storage, user_email=user_email), storage
 
 
 def names(result: dict) -> list[str]:
@@ -177,3 +177,98 @@ def test_a_file_whose_analysis_is_not_ready_is_reported_not_served_from_old_docu
 
     result = catalog.search("montant")
     assert result["columns"] == [] and "ventes.xlsx" in result["not_searchable"]
+
+
+# --- the index of a person: everything they can read, in one saved index ---
+
+USER = "marie@example.fr"
+
+
+def user_blob(*entries) -> bytes:
+    return saved(*entries)  # same format: a merged index of several collections' files
+
+
+def test_a_scope_spanning_several_collections_is_served_by_the_users_index_alone() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+
+    catalog, storage = load([sales, hr], blobs={user_index_key(USER): user_blob(sales, hr)}, user_email=USER)
+
+    assert names(catalog.search("montant"))[0] == "Montant_HT" and "matricule" in names(catalog.search("matricule"))
+    assert storage.reads == [user_index_key(USER)]  # one read for both collections: no collection index, no analysis
+
+
+def test_the_users_index_answers_like_the_collection_indexes_merged() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+    from_user, _ = load([sales, hr], blobs={user_index_key(USER): user_blob(sales, hr)}, user_email=USER)
+    from_collections, _ = load(
+        [sales, hr], blobs={index_key("col-Commercial"): saved(sales), index_key("col-RH"): saved(hr)}
+    )
+    from_scratch = build(sales, hr)
+
+    for query in ("montant", "date", "matricule", "customer"):
+        assert from_user.search(query) == from_scratch.search(query), query
+        assert from_collections.search(query) == from_scratch.search(query), query
+
+
+def test_a_single_collection_scope_uses_the_collection_index_not_the_users() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+
+    catalog, storage = load(
+        [sales],
+        blobs={index_key("col-Commercial"): saved(sales), user_index_key(USER): user_blob(sales)},
+        user_email=USER,
+    )
+
+    assert names(catalog.search("montant")) == ["Montant_HT"] and storage.reads == [index_key("col-Commercial")]
+
+
+def test_files_missing_from_the_users_index_come_from_their_collection_index() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+    blobs = {user_index_key(USER): user_blob(sales), index_key("col-RH"): saved(hr)}  # the user index lags behind
+
+    catalog, storage = load([sales, hr], blobs=blobs, user_email=USER)
+
+    assert "Montant_HT" in names(catalog.search("montant")) and "matricule" in names(catalog.search("matricule"))
+    assert storage.reads == [
+        user_index_key(USER),
+        index_key("col-RH"),
+    ]  # no analysis read, the collection index sufficed
+
+
+def test_without_any_saved_index_everything_is_indexed_in_memory() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+
+    catalog, storage = load([sales, hr], user_email=USER)
+
+    assert "Montant_HT" in names(catalog.search("montant")) and "matricule" in names(catalog.search("matricule"))
+    assert {sales[0]["result_key"], hr[0]["result_key"]} <= set(storage.reads)
+
+
+def test_an_unusable_users_index_is_ignored() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+    blobs = {
+        user_index_key(USER): b"garbage",
+        index_key("col-Commercial"): saved(sales),
+        index_key("col-RH"): saved(hr),
+    }
+
+    catalog, storage = load([sales, hr], blobs=blobs, user_email=USER)
+
+    assert "Montant_HT" in names(catalog.search("montant"))
+    assert not any(read.endswith("analyse.json") for read in storage.reads)  # the collection indexes took over
+
+
+def test_the_users_index_never_serves_files_the_person_no_longer_can_read() -> None:
+    sales = entry("a", "ventes.xlsx", "Commercial", sales_sheets())
+    hr = entry("b", "rh.ods", "RH", hr_sheets())
+    revoked = entry("c", "secret.csv", "Direction", [sheet("S", [column("salaire_direction")])])
+    blob = user_blob(sales, hr, revoked)  # the index was built before the access to "Direction" was withdrawn
+
+    catalog, _ = load([sales, hr], blobs={user_index_key(USER): blob}, user_email=USER)
+
+    assert names(catalog.search("salaire direction")) == []
