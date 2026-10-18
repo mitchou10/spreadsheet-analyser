@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.5.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.0...v0.5.0) (2026-10-18)
+
+
+### Features
+
+* **agent-worker:** let the agent count and list the collections and files of the account ([b9f7db7](https://github.com/mitchou10/spreadsheet-analyser/commit/b9f7db7fead285c1875d586adabf72dcfaba45af))
+* **agent-worker:** let the agent draw a chart of the result of a query ([ebdd3c8](https://github.com/mitchou10/spreadsheet-analyser/commit/ebdd3c8679df49f1d822aae49153c66ecc8eebd3))
+* **agent-worker:** let the agent query the real rows of the files with SQL ([07b7f3a](https://github.com/mitchou10/spreadsheet-analyser/commit/07b7f3a496f7c75a94573c825f5051f7c0aef93a))
+* **agent-worker:** send the plan, the files and the tool calls with each answer ([f6b5434](https://github.com/mitchou10/spreadsheet-analyser/commit/f6b5434b042c6a846d2605c29ae2f243796aa39a))
+* **analysis-worker:** draw the charts from the result of a query ([354670a](https://github.com/mitchou10/spreadsheet-analyser/commit/354670aa9939d25c1bf1f08dc31a89abdda953ef))
+* **analysis-worker:** run sandboxed SQL queries on the parquet copies ([2bec429](https://github.com/mitchou10/spreadsheet-analyser/commit/2bec4298c3d4d7c67027c084d0c0c3739bbc2a0a))
+* **analysis-worker:** write a typed parquet copy of every sheet ([e8b204f](https://github.com/mitchou10/spreadsheet-analyser/commit/e8b204fb24068fd317fcaedc64c6b097916d89ef))
+* **backend:** describe the requester's whole account to the agent worker ([8290029](https://github.com/mitchou10/spreadsheet-analyser/commit/82900298ebdce7ec49a36d9d62a7455b03b00925))
+* **backend:** name the sources of a message, page the messages and store the agent's trace ([a10bc9d](https://github.com/mitchou10/spreadsheet-analyser/commit/a10bc9d60c159dd7dfceacc3dae8ce34ac8d8522))
+* **backend:** queue, authorise and keep the SQL queries of the agent ([055c2d0](https://github.com/mitchou10/spreadsheet-analyser/commit/055c2d0995133b8561208103d096f76598c7d205))
+* **backend:** store, serve and authorise the charts of an answer ([ae8b52a](https://github.com/mitchou10/spreadsheet-analyser/commit/ae8b52aeddea84ea4614b637ce2e04823416ac1b))
+* **frontend:** choose the sources with a plus menu, page the chat and show the agent's tools ([a4232e9](https://github.com/mitchou10/spreadsheet-analyser/commit/a4232e912ef596190f0f0f2225244502d6265b00))
+* **frontend:** import a file from the chat into a collection ([951c35e](https://github.com/mitchou10/spreadsheet-analyser/commit/951c35e24a3cfa2322bba8d2536032794b1a4711))
+* **frontend:** render the assistant's answers as markdown ([7a86942](https://github.com/mitchou10/spreadsheet-analyser/commit/7a869429566dbbdcbd5cd10cc9c5d6d627904130))
+* **frontend:** render the plan and the output of the tools as markdown ([87f3fe2](https://github.com/mitchou10/spreadsheet-analyser/commit/87f3fe2fbc245c0b9e496960b6acad20fd20d7e4))
+* **frontend:** show the charts of an answer in its markdown ([686c201](https://github.com/mitchou10/spreadsheet-analyser/commit/686c2015323445f3c173e58b0c00162c711c8f11))
+* **frontend:** show the SQL of a query and its result as a table ([5ac0c76](https://github.com/mitchou10/spreadsheet-analyser/commit/5ac0c766b67726ed2ea386ef5539f0e0643776b3))
+* run the queries in their own worker and document them ([4784160](https://github.com/mitchou10/spreadsheet-analyser/commit/4784160bb83f1068642b8a87b19c6821a0bf8942))
+
+
+### Bug Fixes
+
+* **agent-worker:** do not end a failed query's message with two periods ([5bf37a2](https://github.com/mitchou10/spreadsheet-analyser/commit/5bf37a2989b159ffeaeea6fc158f29c2496e7f59))
+* **backend:** start every S3 key with the project level and keep old objects reachable ([a6ef896](https://github.com/mitchou10/spreadsheet-analyser/commit/a6ef8964b496b0adc020207b177a1c6cc869ad7e))
+* drop LLM_DEFAULT_MODEL and default to the first model the provider offers ([3c5fa68](https://github.com/mitchou10/spreadsheet-analyser/commit/3c5fa68853c93dd3535e69f3636f7c19eae43728))
+* **workers:** start the search index keys with the project level ([d32e91f](https://github.com/mitchou10/spreadsheet-analyser/commit/d32e91ffb51c11070929de3828d07d31c43d4f44))
+
+
+### Dependencies
+
+* pass S3_KEY_PREFIX to the services that build or read S3 keys ([659f2e3](https://github.com/mitchou10/spreadsheet-analyser/commit/659f2e3f032b376228498560dbb73827ea3cf6d8))
+
 ## [0.5.0-rc.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.0-rc...v0.5.0-rc.1) (2026-10-18)
 
 
