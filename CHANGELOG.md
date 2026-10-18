@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.0-rc.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.0-rc...v0.5.0-rc.1) (2026-10-18)
+
+
+### Features
+
+* **agent-worker:** let the agent count and list the collections and files of the account ([5d25a8e](https://github.com/mitchou10/spreadsheet-analyser/commit/5d25a8eeae806d3d0e6c074c8b5d2dc7d029e49a))
+* **agent-worker:** let the agent draw a chart of the result of a query ([45036a0](https://github.com/mitchou10/spreadsheet-analyser/commit/45036a0bef8d2f0765a38e825b06d2578e255552))
+* **agent-worker:** let the agent query the real rows of the files with SQL ([a021c95](https://github.com/mitchou10/spreadsheet-analyser/commit/a021c956d512a1442798423cffa2562adb8e7602))
+* **analysis-worker:** draw the charts from the result of a query ([d5e4794](https://github.com/mitchou10/spreadsheet-analyser/commit/d5e47945d8980b813291daee54083d166e0f634e))
+* **analysis-worker:** run sandboxed SQL queries on the parquet copies ([942b3e4](https://github.com/mitchou10/spreadsheet-analyser/commit/942b3e49377edec06f679fcea7b0ecbd2e2a9bb0))
+* **analysis-worker:** write a typed parquet copy of every sheet ([711af31](https://github.com/mitchou10/spreadsheet-analyser/commit/711af3189e9fb4817649fbd42c429d60ad494f9b))
+* **backend:** describe the requester's whole account to the agent worker ([bd19f61](https://github.com/mitchou10/spreadsheet-analyser/commit/bd19f611716a64c207edcc88df1b1e2f163f159a))
+* **backend:** queue, authorise and keep the SQL queries of the agent ([20cc3ec](https://github.com/mitchou10/spreadsheet-analyser/commit/20cc3ec76803d0c9e2f15fe12340fe9b6cada051))
+* **backend:** store, serve and authorise the charts of an answer ([a671bab](https://github.com/mitchou10/spreadsheet-analyser/commit/a671baba5130c210e29bb46ab7e3bb331b9e6cbb))
+* **frontend:** import a file from the chat into a collection ([2643892](https://github.com/mitchou10/spreadsheet-analyser/commit/264389264736177eb8fa95d36ac184f0690d9d61))
+* **frontend:** render the plan and the output of the tools as markdown ([d5d2e8c](https://github.com/mitchou10/spreadsheet-analyser/commit/d5d2e8cab690ee3ecf9f8adc81963a0f402423dc))
+* **frontend:** show the charts of an answer in its markdown ([2208b63](https://github.com/mitchou10/spreadsheet-analyser/commit/2208b6301a867173ee8f444aa0e086f1b2d50968))
+* **frontend:** show the SQL of a query and its result as a table ([1b5e806](https://github.com/mitchou10/spreadsheet-analyser/commit/1b5e80658e2735a46608d206b55cc4f606991fc8))
+* run the queries in their own worker and document them ([6d65d98](https://github.com/mitchou10/spreadsheet-analyser/commit/6d65d98f3ec4ad8b2858424c76d4ec42c41a3ca8))
+
+
+### Bug Fixes
+
+* **agent-worker:** do not end a failed query's message with two periods ([70cb335](https://github.com/mitchou10/spreadsheet-analyser/commit/70cb335911c7e5e84bd5d42872901c5aa774a8a1))
+
 ## [0.5.0-rc](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.1-rc...v0.5.0-rc) (2026-10-17)
 
 
