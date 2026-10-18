@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.2...v0.6.3) (2026-10-18)
+
+
+### Bug Fixes
+
+* **helm:** give the ingress the mirai-nginx class ([75d2fcc](https://github.com/mitchou10/spreadsheet-analyser/commit/75d2fcc63cc60e82d80ff97e226d6a57a7d1f463))
+
 ## [0.6.2](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.1...v0.6.2) (2026-10-18)
 
 
