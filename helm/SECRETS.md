@@ -54,15 +54,16 @@ un pod ne reçoit que les `Secret` qu'il liste dans `envFrom`.
 
 | Chemin Vault (exemple) | Clés à y écrire | `Secret` créé | Lu par |
 |---|---|---|---|
-| `spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker, index_worker, query_worker |
-| `spreadsheet-analyser/keycloak` | `KEYCLOAK_CLIENT_SECRET` | `spreadsheet-analyser-keycloak` | backend |
-| `spreadsheet-analyser/openai` | `OPENAI_API_KEY` | `spreadsheet-analyser-openai` | backend, agent_worker |
-| `spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker, query_worker |
-| `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker, query_worker |
-| `spreadsheet-analyser/db` | `username`, `password` | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) | backend, jobs.migration |
+| `<vaultEnv>/spreadsheet-analyser/s3` | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` (optionnelles : `AWS_ENDPOINT_URL_S3`, `AWS_S3_BUCKET`, `AWS_REGION`, `S3_KEY_PREFIX`) | `spreadsheet-analyser-s3` | backend, agent_worker, analysis_worker, index_worker, query_worker |
+| `<vaultEnv>/spreadsheet-analyser/keycloak` | `KEYCLOAK_CLIENT_SECRET` (optionnelles : `KEYCLOAK_URL`, `KEYCLOAK_PUBLIC_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`) | `spreadsheet-analyser-keycloak` | backend |
+| `<vaultEnv>/spreadsheet-analyser/openai` | `OPENAI_API_KEY` (optionnelles : `OPENAI_BASE_URL`, `LLM_ALLOWED_MODELS`) | `spreadsheet-analyser-openai` | backend, agent_worker |
+| `<vaultEnv>/spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker, query_worker |
+| `<vaultEnv>/spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker, query_worker |
+| `<vaultEnv>/spreadsheet-analyser/db` | `username`, `password` (`username` = `spreadsheet_analyser`, le propriétaire créé par CloudNativePG) | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) et `spreadsheet-analyser-db-appuser` (type `basic-auth`, lu par CloudNativePG) | backend, jobs.migration ; CloudNativePG |
 
-Le point d'accès (`mount`, égal à la valeur `environment`), les chemins et le `vaultAuthRef` dépendent de votre plateforme : ils se règlent dans vos
-valeurs, pas dans le chart. `INTERNAL_API_TOKEN` est volontairement dans **un seul** `Secret` partagé par tous les
+Les clés « optionnelles » ne sont pas secrètes : le chart les définit déjà dans `env:` (section suivante). Les écrire dans Vault est possible, mais elles seraient alors ignorées tant qu'elles restent aussi dans `env:`, qui est prioritaire sur `envFrom` : retirez-les d'`env:` pour que Vault fasse foi.
+
+Tous les chemins sont dans le moteur KV v2 `global.vaultMount` (`exploration` par défaut), préfixés par `global.vaultEnv` (`dev` par défaut ; `staging`, `prod`… dans le fichier de valeurs de l'environnement) : `<vaultEnv>/spreadsheet-analyser/<secret>`. Le `vaultAuthRef` dépend de votre plateforme. `INTERNAL_API_TOKEN` est volontairement dans **un seul** `Secret` partagé par tous les
 composants, pour que le backend et les trois workers ne puissent jamais diverger.
 
 ### Écrire les secrets dans Vault
@@ -71,7 +72,7 @@ Générez les valeurs aléatoires directement vers Vault, sans les faire passer 
 valeur sur l'entrée standard) :
 
 ```bash
-openssl rand -hex 32 | vault kv put -mount=<environment> spreadsheet-analyser/internal INTERNAL_API_TOKEN=-
+openssl rand -hex 32 | vault kv put -mount=<vaultMount> <vaultEnv>/spreadsheet-analyser/internal INTERNAL_API_TOKEN=-
 ```
 
 - `INTERNAL_API_TOKEN` : 32 octets aléatoires, comme ci-dessus.
@@ -81,6 +82,29 @@ openssl rand -hex 32 | vault kv put -mount=<environment> spreadsheet-analyser/in
   PostgreSQL, RustFS ou S3).
 - `OPENAI_API_KEY` : créée chez votre fournisseur, de préférence une clé dédiée à l'application avec un plafond de
   dépense.
+
+### Variables non secrètes qui vont avec
+
+Chaque secret ci-dessus a besoin de sa configuration, qui n'est **pas** dans Vault mais dans `env:` du composant
+(`values/common-values.yaml`, surchargée par le fichier de valeurs de l'environnement).
+
+| Secret | Variable `env:` | Rôle | Composants |
+|---|---|---|---|
+| S3 | `AWS_ENDPOINT_URL_S3` | URL du service S3 / RustFS. À omettre pour AWS S3 | backend, tous les workers |
+| S3 | `AWS_S3_BUCKET` | Nom du bucket | backend, tous les workers |
+| S3 | `AWS_REGION` | Région (`us-east-1` par défaut) | backend, tous les workers |
+| S3 | `S3_KEY_PREFIX` | Premier niveau de chaque clé d'objet. **Même valeur** dans le backend, `agent_worker`, `index_worker` et `query_worker` | backend, agent, index, query |
+| Keycloak | `KEYCLOAK_URL` | URL de Keycloak vue par le backend (service interne possible) | backend |
+| Keycloak | `KEYCLOAK_PUBLIC_URL` | URL vue par le navigateur, si elle diffère de `KEYCLOAK_URL`. Sinon `KEYCLOAK_URL` est utilisée | backend |
+| Keycloak | `KEYCLOAK_REALM` | Realm (`spreadsheet-analyser`) | backend |
+| Keycloak | `KEYCLOAK_CLIENT_ID` | Client du backend (`spreadsheet-analyser-backend`), celui dont `KEYCLOAK_CLIENT_SECRET` est le secret | backend |
+| Keycloak | `BACKEND_PUBLIC_URL` | URL publique du backend, d'où est construit le `redirect_uri` OAuth2 (`<BACKEND_PUBLIC_URL>/api/auth/callback`) | backend |
+| Keycloak | `FRONTEND_URL` | Où le navigateur arrive après connexion et déconnexion | backend |
+| Keycloak | `SESSION_COOKIE_SECURE` | `true` en HTTPS (valeur par défaut) | backend |
+| OpenAI | `OPENAI_BASE_URL` | URL d'un fournisseur compatible OpenAI (LiteLLM, vLLM, Ollama…). Vide pour `api.openai.com` | backend, agent_worker |
+| OpenAI | `LLM_ALLOWED_MODELS` | Identifiants de modèles exposés, séparés par des virgules. Vide : tous ceux que le fournisseur liste et qui répondent | backend |
+| Redis / base | hôtes | Ils sont dans le modèle VSO de `REDIS_URL` et `DATABASE_URL` (`extraObjects`), pas dans `env:` | — |
+| Interne | `BACKEND_URL` | URL du backend (`http://spreadsheet-analyser-backend`), que les workers appellent avec `INTERNAL_API_TOKEN` | tous les workers |
 
 ## Comment les secrets arrivent dans les pods
 
@@ -170,8 +194,9 @@ créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker
 
 - les URL (`KEYCLOAK_URL`, `BACKEND_PUBLIC_URL`, `FRONTEND_URL`, `AWS_ENDPOINT_URL_S3`) et l'exposition
   (`ingress`, `httpRoute` ou `gateway` du chart) ;
-- PostgreSQL, Redis, S3 / RustFS et Keycloak : externes par défaut (les sous-charts `redis`, `postgres` et `rustfs`
-  existent mais sont désactivés) ;
+- PostgreSQL est déployé par CloudNativePG (`cnpg`, dépendance `cluster`, comme Muffin ; le service de lecture-écriture
+  est `spreadsheet-analyser-pg-cluster-rw`). Redis, S3 / RustFS et Keycloak sont externes (les sous-charts `redis`,
+  `postgres` et `rustfs` existent mais sont désactivés). L'opérateur CloudNativePG doit être installé dans le cluster ;
 - le `mount`, les `path` et le `vaultAuthRef` des `VaultStaticSecret`, ainsi que les hôtes de `DATABASE_URL` et
   `REDIS_URL` ;
 - le frontend est compilé avec `VITE_API_BASE_URL=http://localhost:8000` par défaut : la CD doit passer cette
