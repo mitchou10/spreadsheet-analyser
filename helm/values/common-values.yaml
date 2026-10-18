@@ -22,6 +22,28 @@ global:
   # `<vaultEnv>/spreadsheet-analyser/<secret>`. Defaults; an environment file overrides `vaultEnv`.
   vaultMount: "exploration"
   vaultEnv: "dev"
+  # One Ingress for the whole application, like Muffin: `/api` goes to the backend, everything else to the frontend.
+  # The host (and `tls`) belong to the environment file; `whitelist` (a list of CIDRs, from the shared
+  # `ipwhitelist.yaml`) restricts the source addresses, any address when it is empty.
+  ingress:
+    enabled: true
+    annotations:
+      monitor: enabled
+      nginx.ingress.kubernetes.io/whitelist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+      k8s.apisix.apache.org/allowlist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
+    hosts:
+      - name: "spreadsheet-analyser.example.org"
+        paths:
+          - path: "/api"
+            pathType: "Prefix"
+            backend:
+              serviceName: "spreadsheet-analyser-backend"
+              portNumber: 80
+          - path: "/"
+            pathType: "Prefix"
+            backend:
+              serviceName: "spreadsheet-analyser-frontend"
+              portNumber: 80
 
 backend:
   # Listed last: for a variable defined in several sources, the last one wins, so the computed secrets
