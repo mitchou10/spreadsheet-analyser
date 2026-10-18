@@ -5,6 +5,10 @@ target-branch: main
 # as a chart and ignores the rest.
 chart-dirs:
 - .
+# Only the plain-HTTP repositories need declaring; the cloudpirates dependencies
+# are pulled straight from their OCI registry by `helm dependency build`.
+chart-repos:
+- cnpg=https://cloudnative-pg.github.io/charts
 helm-extra-args: ''
 validate-chart-schema: false
 validate-chart-values: true
