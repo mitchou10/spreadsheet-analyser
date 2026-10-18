@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.1...v0.6.2) (2026-10-18)
+
+
+### Bug Fixes
+
+* **helm:** keep the default storage of the cnpg cluster, it cannot shrink ([028f085](https://github.com/mitchou10/spreadsheet-analyser/commit/028f085d6c86f352e3694591fa918bad5e93acd7))
+
 ## [0.6.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.0...v0.6.1) (2026-10-18)
 
 
