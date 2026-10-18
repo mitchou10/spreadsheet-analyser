@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.0...v0.5.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **secrets:** update mount paths to use environment variable for Vault KV mount ([c3e4c1c](https://github.com/mitchou10/spreadsheet-analyser/commit/c3e4c1ce0196fe9463d4954c275ff55515c12a3f))
+
 ## [0.5.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.4.0...v0.5.0) (2026-10-18)
 
 
