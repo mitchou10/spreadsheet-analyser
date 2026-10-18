@@ -39,7 +39,7 @@ env:
     # Chart.yaml's `name:` field (`spreadsheet-analyser`), not from this directory name.
     CHARTS_DIR: ./
     CHART_NAME: helm
-    HELM_REPOS: ""
+    HELM_REPOS: cnpg=https://cloudnative-pg.github.io/charts
 
 jobs:
     expose-vars:
