@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.4](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.3...v0.6.4) (2026-10-18)
+
+
+### Bug Fixes
+
+* **helm:** point S3 at the Scaleway endpoint and use the mirai realm ([94280b1](https://github.com/mitchou10/spreadsheet-analyser/commit/94280b1ecf1583b69bc4acf5236a2bf484ea00bc))
+
 ## [0.6.3](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.2...v0.6.3) (2026-10-18)
 
 
