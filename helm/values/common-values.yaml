@@ -27,6 +27,9 @@ global:
   # `ipwhitelist.yaml`) restricts the source addresses, any address when it is empty.
   ingress:
     enabled: true
+    # The cluster's ingress controller (every other Mirai application sets it): without a class no controller
+    # takes the Ingress over, and the host answers 404.
+    className: "mirai-nginx"
     annotations:
       monitor: enabled
       nginx.ingress.kubernetes.io/whitelist-source-range: '{{ .Values.whitelist | join "," | default "0.0.0.0/0" }}'
