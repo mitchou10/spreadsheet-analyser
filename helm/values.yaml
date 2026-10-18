@@ -5448,3 +5448,8 @@ postgres:
 # @section -- Dependencies
 rustfs:
   enabled: false
+# -- CloudNativePG cluster (the `cluster` chart, aliased `cnpg`). Off by default: the environment values enable
+# it and configure it (see `values/common-values.yaml`).
+# @section -- Dependencies
+cnpg:
+  enabled: false

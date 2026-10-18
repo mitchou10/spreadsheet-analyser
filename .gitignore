@@ -29,5 +29,3 @@ dist/
 .idea/
 .DS_Store
 
-# --- Helm ---
-helm/charts/*.tgz
