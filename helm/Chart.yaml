@@ -10,8 +10,8 @@ kubeVersion: ">=1.25.0-0"
 deprecated: false
 annotations: {}
 keywords: []
-# Optional, all off by default (see the `redis`, `postgres` and `rustfs` keys of values.yaml): the
-# application normally runs against managed services.
+# Optional (see the `redis`, `postgres`, `rustfs` and `cnpg` keys of values.yaml). The packaged archives are
+# committed in `charts/`: `helm dependency update` refreshes them when a version below changes.
 dependencies:
   - name: redis
     alias: redis
@@ -28,6 +28,11 @@ dependencies:
     version: 0.10.0
     repository: oci://registry-1.docker.io/cloudpirates
     condition: rustfs.enabled
+  - name: cluster
+    alias: cnpg
+    version: 0.8.1
+    repository: https://cloudnative-pg.github.io/charts
+    condition: cnpg.enabled
 sources:
   - https://github.com/mitchou10/spreadsheet-analyser
   - https://github.com/this-is-tobi/helm-charts

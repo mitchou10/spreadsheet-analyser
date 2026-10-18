@@ -8,5 +8,8 @@ dependencies:
 - name: rustfs
   repository: oci://registry-1.docker.io/cloudpirates
   version: 0.10.0
-digest: sha256:702fa1e7edef230341de9c136ea8a269ee9a3fbfb888db55051effa6820b4c52
-generated: "2026-10-17T19:10:02.921796413+02:00"
+- name: cluster
+  repository: https://cloudnative-pg.github.io/charts
+  version: 0.8.1
+digest: sha256:dfbf51f78178f51d5dc281e2f4338bcf9946826f93ddb8c90a023e3b52d77904
+generated: "2026-10-18T18:49:45.092359016+02:00"
