@@ -195,7 +195,7 @@ créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker
 - les URL (`KEYCLOAK_URL`, `BACKEND_PUBLIC_URL`, `FRONTEND_URL`, `AWS_ENDPOINT_URL_S3`) et l'exposition
   (`ingress`, `httpRoute` ou `gateway` du chart) ;
 - PostgreSQL est déployé par CloudNativePG (`cnpg`, dépendance `cluster`, comme Muffin ; le service de lecture-écriture
-  est `spreadsheet-analyser-pg-cluster-rw`). Redis, S3 / RustFS et Keycloak sont externes (les sous-charts `redis`,
+  est `spreadsheet-analyser-pg-cluster-rw`). S3 / RustFS et Keycloak sont externes (le sous-chart `redis` est activé comme dans Muffin, son service `spreadsheet-analyser-redis` est l'hôte de `REDIS_URL` ; les sous-charts
   `postgres` et `rustfs` existent mais sont désactivés). L'opérateur CloudNativePG doit être installé dans le cluster ;
 - le `mount`, les `path` et le `vaultAuthRef` des `VaultStaticSecret`, ainsi que les hôtes de `DATABASE_URL` et
   `REDIS_URL` ;

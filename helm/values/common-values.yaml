@@ -356,7 +356,7 @@ extraObjects:
         transformation:
           templates:
             REDIS_URL:
-              text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@redis.example.svc:6379/0'
+              text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@spreadsheet-analyser-redis:6379/0'
 
   # Same Vault path as `spreadsheet-analyser-db`: the owner CNPG creates with `initdb`. CNPG requires a
   # kubernetes.io/basic-auth Secret (keys username + password): with an Opaque one (the VSO default) the
@@ -406,8 +406,32 @@ extraObjects:
             DATABASE_URL:
               text: 'postgresql+asyncpg://{{ "{{" }} get .Secrets "username" {{ "}}" }}:{{ "{{" }} get .Secrets "password" {{ "}}" }}@spreadsheet-analyser-pg-cluster-rw:5432/spreadsheet_analyser'
 
-# PostgreSQL is run by CloudNativePG (the `cnpg` cluster below), not by the bundled chart. Redis and the object
-# storage are external: nothing is self-hosted for them.
+# PostgreSQL is run by CloudNativePG (the `cnpg` cluster below), not by the bundled chart. The object storage is
+# external: nothing is self-hosted for it.
+# Redis (sessions of the backend and Celery queues) is the bundled chart, like Muffin; its Service is
+# `<fullnameOverride>` (host of REDIS_URL, see `spreadsheet-analyser-redis`).
+redis:
+  enabled: true
+  fullnameOverride: "spreadsheet-analyser-redis"
+  architecture: "standalone"
+  auth:
+    existingSecret: "spreadsheet-analyser-redis"
+    existingSecretPasswordKey: "REDIS_PASSWORD"
+  # The generated redis.conf has no `dir`, so redis writes in / and the read-only root filesystem makes the RDB
+  # snapshots fail (MISCONF): point it at the persistent volume.
+  config:
+    content: |
+      # Redis configuration
+      bind * -::*
+      dir /data
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
 postgres:
   enabled: false
 
