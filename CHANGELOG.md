@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.0...v0.6.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **helm:** deploy redis with the bundled chart and point REDIS_URL at its service ([2620973](https://github.com/mitchou10/spreadsheet-analyser/commit/262097351b0a9728236ee43117822e555e0e57af))
+* **helm:** set the resources and the storage of the cnpg cluster for the namespace quota ([6d51f5f](https://github.com/mitchou10/spreadsheet-analyser/commit/6d51f5fb1caae27aa52f89ce50502b8e5168da01))
+
 ## [0.6.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.1...v0.6.0) (2026-10-18)
 
 

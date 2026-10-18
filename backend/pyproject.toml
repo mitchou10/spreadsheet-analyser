@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "0.6.0"
+version = "0.6.1"
 description = "spreadsheet-analyser backend API"
 requires-python = ">=3.12"
 dependencies = [
