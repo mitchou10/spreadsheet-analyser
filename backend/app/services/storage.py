@@ -89,6 +89,10 @@ class StorageService:
     def bucket(self) -> str:
         return self._settings.AWS_S3_BUCKET
 
+    @property
+    def endpoint(self) -> str | None:
+        return self._settings.AWS_ENDPOINT_URL_S3
+
     def _client(self):
         return self._session.client("s3", endpoint_url=self._settings.AWS_ENDPOINT_URL_S3, config=self._config)
 
@@ -98,6 +102,11 @@ class StorageService:
                 await s3.head_bucket(Bucket=self.bucket)
             except ClientError:
                 await s3.create_bucket(Bucket=self.bucket)
+
+    async def check_bucket(self) -> None:
+        """Raises when the bucket cannot be reached (endpoint, credentials or bucket missing): used by /api/health."""
+        async with self._client() as s3:
+            await s3.head_bucket(Bucket=self.bucket)
 
     async def put_object(self, key: str, body: bytes, content_type: str | None = None) -> None:
         async with self._client() as s3:

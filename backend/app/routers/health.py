@@ -1,6 +1,11 @@
+import logging
+
 from fastapi import APIRouter, Response, status
 
-from app.connectors import db_connector, redis_connector
+from app.connectors import StorageConnector, db_connector, redis_connector
+from app.dependencies import StorageDep
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["Health"])
 
@@ -10,12 +15,20 @@ router = APIRouter(tags=["Health"])
     summary="Perform a health check",
     status_code=status.HTTP_200_OK,
 )
-async def get_health(response: Response) -> dict:
-    dependencies = [redis_connector.get_health(), await db_connector.get_health()]
+async def get_health(response: Response, storage: StorageDep) -> dict:
+    dependencies = [
+        redis_connector.get_health(),
+        await db_connector.get_health(),
+        await StorageConnector(storage).get_health(),
+    ]
 
     api_status = "healthy"
     for dependency in dependencies:
-        if dependency["status"] == "unhealthy":
+        if dependency["status"] != "unhealthy":
+            continue
+        # The reason is in the response body, but a probe only keeps the status code: log it too.
+        logger.warning("Health check: %s is unhealthy: %s", dependency["name"], dependency.get("extras"))
+        if dependency.get("critical", True):
             api_status = "unhealthy"
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
