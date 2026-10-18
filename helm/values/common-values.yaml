@@ -421,6 +421,21 @@ cnpg:
   mode: "standalone"
   cluster:
     imageName: "ghcr.io/cloudnative-pg/postgresql:17.7"
+    instances: 1
+    storage:
+      size: "4Gi"
+    walStorage:
+      enabled: true
+      size: "1Gi"
+    # Required by the namespace quota (`dso-quota`): CNPG applies it to every pod of the cluster, including the
+    # `initdb` job and its `bootstrap-controller` container.
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
     initdb:
       database: "spreadsheet_analyser"
       owner: "spreadsheet_analyser"
