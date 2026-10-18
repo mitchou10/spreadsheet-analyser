@@ -67,16 +67,16 @@ backend:
   # Plain (non-secret) app config - see backend/app/config/*.py for the full settings contract.
   env:
     KEYCLOAK_URL: "https://keycloak.example.org"
-    KEYCLOAK_REALM: "spreadsheet-analyser"
+    KEYCLOAK_REALM: "mirai"
     KEYCLOAK_CLIENT_ID: "spreadsheet-analyser-backend"
     BACKEND_PUBLIC_URL: "https://spreadsheet-analyser.example.org"
     FRONTEND_URL: "https://spreadsheet-analyser.example.org"
     SESSION_COOKIE_SECURE: "true"
-    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_ENDPOINT_URL_S3: "https://s3.fr-par.scw.cloud"
     AWS_S3_BUCKET: "spreadsheet-analyser"
     # First level of every object key: the same value in the backend, the agent worker and the index worker.
     S3_KEY_PREFIX: "spreadsheet-analyser"
-    AWS_REGION: "us-east-1"
+    AWS_REGION: "fr-par"
     OPENAI_BASE_URL: ""
     LLM_ALLOWED_MODELS: ""
 
@@ -93,11 +93,11 @@ agent_worker:
         name: "spreadsheet-analyser-redis"
   env:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
-    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_ENDPOINT_URL_S3: "https://s3.fr-par.scw.cloud"
     AWS_S3_BUCKET: "spreadsheet-analyser"
     # First level of every object key: the same value in the backend, the agent worker and the index worker.
     S3_KEY_PREFIX: "spreadsheet-analyser"
-    AWS_REGION: "us-east-1"
+    AWS_REGION: "fr-par"
     OPENAI_BASE_URL: ""
 
 # Profiles the spreadsheets (csv, xlsx, xls, ods). Consumes the `analysis` queue. Never needs the LLM key.
@@ -111,9 +111,9 @@ analysis_worker:
         name: "spreadsheet-analyser-redis"
   env:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
-    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_ENDPOINT_URL_S3: "https://s3.fr-par.scw.cloud"
     AWS_S3_BUCKET: "spreadsheet-analyser"
-    AWS_REGION: "us-east-1"
+    AWS_REGION: "fr-par"
   # A spreadsheet is streamed (memory stays flat) but this is the ceiling: a pathological file can only
   # ever cost this pod. The image also recycles a Celery child that grows past ~600 MB.
   resources:
@@ -140,11 +140,11 @@ index_worker:
         name: "spreadsheet-analyser-redis"
   env:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
-    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_ENDPOINT_URL_S3: "https://s3.fr-par.scw.cloud"
     AWS_S3_BUCKET: "spreadsheet-analyser"
     # First level of every object key: the same value in the backend, the agent worker and the index worker.
     S3_KEY_PREFIX: "spreadsheet-analyser"
-    AWS_REGION: "us-east-1"
+    AWS_REGION: "fr-par"
   resources:
     requests:
       cpu: "100m"
@@ -176,9 +176,9 @@ query_worker:
         name: "spreadsheet-analyser-redis"
   env:
     BACKEND_URL: "http://spreadsheet-analyser-backend"
-    AWS_ENDPOINT_URL_S3: "https://s3.example.org"
+    AWS_ENDPOINT_URL_S3: "https://s3.fr-par.scw.cloud"
     AWS_S3_BUCKET: "spreadsheet-analyser"
-    AWS_REGION: "us-east-1"
+    AWS_REGION: "fr-par"
     # Per query: memory DuckDB may use before spilling to disk, time allowed, rows given back.
     QUERY_MEMORY_LIMIT: "512MB"
     QUERY_TIMEOUT_SECONDS: "30"
