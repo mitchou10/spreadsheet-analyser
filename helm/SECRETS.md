@@ -61,7 +61,7 @@ un pod ne reçoit que les `Secret` qu'il liste dans `envFrom`.
 | `spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker, query_worker |
 | `spreadsheet-analyser/db` | `username`, `password` | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) | backend, jobs.migration |
 
-Le point d'accès (`mount`), les chemins et le `vaultAuthRef` dépendent de votre plateforme : ils se règlent dans vos
+Le point d'accès (`mount`, égal à la valeur `environment`), les chemins et le `vaultAuthRef` dépendent de votre plateforme : ils se règlent dans vos
 valeurs, pas dans le chart. `INTERNAL_API_TOKEN` est volontairement dans **un seul** `Secret` partagé par tous les
 composants, pour que le backend et les trois workers ne puissent jamais diverger.
 
@@ -71,7 +71,7 @@ Générez les valeurs aléatoires directement vers Vault, sans les faire passer 
 valeur sur l'entrée standard) :
 
 ```bash
-openssl rand -hex 32 | vault kv put -mount=kv spreadsheet-analyser/internal INTERNAL_API_TOKEN=-
+openssl rand -hex 32 | vault kv put -mount=<environment> spreadsheet-analyser/internal INTERNAL_API_TOKEN=-
 ```
 
 - `INTERNAL_API_TOKEN` : 32 octets aléatoires, comme ci-dessus.

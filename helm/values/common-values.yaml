@@ -17,6 +17,10 @@
 # name: the workers reach the backend by its Service name below, and `env` values are not templated.
 fullnameOverride: "spreadsheet-analyser"
 
+# Name of the environment (dev, staging, prod...), set by each environment file. It is the Vault KV v2 mount
+# of every VaultStaticSecret below, so the secrets live at `<environment>/spreadsheet-analyser/<secret>`.
+environment: "dev"
+
 backend:
   # Listed last: for a variable defined in several sources, the last one wins, so the computed secrets
   # (DATABASE_URL, REDIS_URL) cannot be shadowed by a stray key of another secret.
@@ -216,7 +220,7 @@ extraObjects:
       name: spreadsheet-analyser-s3
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/s3
       refreshAfter: 60s
@@ -241,7 +245,7 @@ extraObjects:
       name: spreadsheet-analyser-keycloak
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/keycloak
       refreshAfter: 60s
@@ -260,7 +264,7 @@ extraObjects:
       name: spreadsheet-analyser-openai
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/openai
       refreshAfter: 60s
@@ -282,7 +286,7 @@ extraObjects:
       name: spreadsheet-analyser-internal
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/internal
       refreshAfter: 60s
@@ -309,7 +313,7 @@ extraObjects:
       name: spreadsheet-analyser-redis
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/redis
       refreshAfter: 60s
@@ -340,7 +344,7 @@ extraObjects:
       name: spreadsheet-analyser-db
     spec:
       vaultAuthRef: vault-auth
-      mount: kv
+      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
       type: kv-v2
       path: spreadsheet-analyser/db
       refreshAfter: 60s
