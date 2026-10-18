@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.4...v0.7.0) (2026-10-18)
+
+
+### Features
+
+* **backend:** log why the health check fails and report the state of S3 ([1e0278b](https://github.com/mitchou10/spreadsheet-analyser/commit/1e0278b8e848c3bf8ad6c41d378dd0df5e7c32c7))
+
 ## [0.6.4](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.3...v0.6.4) (2026-10-18)
 
 
