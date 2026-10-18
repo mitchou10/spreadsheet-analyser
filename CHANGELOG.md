@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.1...v0.6.0) (2026-10-18)
+
+
+### Features
+
+* **helm:** expose the frontend and the backend through one ingress with an IP allowlist ([645cbfd](https://github.com/mitchou10/spreadsheet-analyser/commit/645cbfdd605da9afde1b2fa1ac9f76ec30d4e7a8))
+
+
+### Bug Fixes
+
+* **helm:** add the cnpg cluster dependency and commit the chart archives ([e4b8d44](https://github.com/mitchou10/spreadsheet-analyser/commit/e4b8d44c2ded146c961ef0801c8302632cc58b1f))
+* **helm:** read the Vault secrets from global.vaultMount/vaultEnv and run PostgreSQL with cnpg ([4e2bbbe](https://github.com/mitchou10/spreadsheet-analyser/commit/4e2bbbe79dffeac4c20002b00d604a0e204875ad))
+
 ## [0.5.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.5.0...v0.5.1) (2026-10-18)
 
 
