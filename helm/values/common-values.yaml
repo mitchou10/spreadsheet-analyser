@@ -6,9 +6,9 @@
 #   helm upgrade --install spreadsheet-analyser ./helm \
 #     -f helm/values/common-values.yaml -f values-<env>.yaml
 #
-# What an environment file must set: the hostnames/URLs below, the `mount`/`path`/`vaultAuthRef` of each
-# VaultStaticSecret (the KV v2 engine and where the secrets live in it) and the hosts in the
-# DATABASE_URL / REDIS_URL templates. See helm/SECRETS.md for the secrets themselves.
+# What an environment file must set: the hostnames/URLs below, `global.vaultMount`
+# (the Vault KV v2 mount, e.g. exploration) and `global.vaultEnv` (dev, staging, prod...: the first level of every
+# path, `<vaultEnv>/spreadsheet-analyser/<secret>`), the `vaultAuthRef` if it differs, and the hosts in the DATABASE_URL / REDIS_URL templates. See helm/SECRETS.md for the secrets themselves.
 #
 # `{{ "{{" }} ... {{ "}}" }}` is how a Vault Secrets Operator template is written inside a Helm value:
 # `extraObjects` is rendered with `tpl`, so the escaped braces come out as `{{ ... }}` for the operator.
@@ -17,9 +17,11 @@
 # name: the workers reach the backend by its Service name below, and `env` values are not templated.
 fullnameOverride: "spreadsheet-analyser"
 
-# Name of the environment (dev, staging, prod...), set by each environment file. It is the Vault KV v2 mount
-# of every VaultStaticSecret below, so the secrets live at `<environment>/spreadsheet-analyser/<secret>`.
-environment: "dev"
+global:
+  # Where the Vault Secrets Operator reads the secrets: KV v2 mount `vaultMount`, path
+  # `<vaultEnv>/spreadsheet-analyser/<secret>`. Defaults; an environment file overrides `vaultEnv`.
+  vaultMount: "exploration"
+  vaultEnv: "dev"
 
 backend:
   # Listed last: for a variable defined in several sources, the last one wins, so the computed secrets
@@ -220,9 +222,9 @@ extraObjects:
       name: spreadsheet-analyser-s3
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/s3
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/s3'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -245,9 +247,9 @@ extraObjects:
       name: spreadsheet-analyser-keycloak
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/keycloak
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/keycloak'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -264,9 +266,9 @@ extraObjects:
       name: spreadsheet-analyser-openai
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/openai
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/openai'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -286,9 +288,9 @@ extraObjects:
       name: spreadsheet-analyser-internal
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/internal
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/internal'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -313,9 +315,9 @@ extraObjects:
       name: spreadsheet-analyser-redis
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/redis
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/redis'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -334,7 +336,28 @@ extraObjects:
             REDIS_URL:
               text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@redis.example.svc:6379/0'
 
-  # Vault keys: username, password (the application's database user). Only DATABASE_URL reaches the pods:
+  # Same Vault path as `spreadsheet-analyser-db`: the owner CNPG creates with `initdb`. CNPG requires a
+  # kubernetes.io/basic-auth Secret (keys username + password): with an Opaque one (the VSO default) the
+  # Cluster waits forever.
+  spreadsheet-analyser-db-appuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: spreadsheet-analyser-db-appuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
+      type: kv-v2
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db'
+      refreshAfter: 60s
+      destination:
+        name: spreadsheet-analyser-db-appuser
+        create: true
+        type: kubernetes.io/basic-auth
+
+  # Vault keys: username, password (the application's database user, also the owner of the CNPG database:
+  # see `spreadsheet-analyser-db-appuser`). The host is the read-write Service of the CNPG cluster
+  # (`cnpg.fullnameOverride` + `-rw`). Only DATABASE_URL reaches the pods:
   # `excludes` drops the raw username/password. The driver MUST be postgresql+asyncpg (backend/app/config/
   # database.py). Same assumption on URL-reserved characters as above.
   spreadsheet-analyser-db:
@@ -344,9 +367,9 @@ extraObjects:
       name: spreadsheet-analyser-db
     spec:
       vaultAuthRef: vault-auth
-      mount: '{{ required "environment is required (name of the Vault KV mount)" .Values.environment }}'
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: spreadsheet-analyser/db
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
@@ -359,4 +382,27 @@ extraObjects:
             - ".*"
           templates:
             DATABASE_URL:
-              text: 'postgresql+asyncpg://{{ "{{" }} get .Secrets "username" {{ "}}" }}:{{ "{{" }} get .Secrets "password" {{ "}}" }}@postgres.example.svc:5432/spreadsheet_analyser'
+              text: 'postgresql+asyncpg://{{ "{{" }} get .Secrets "username" {{ "}}" }}:{{ "{{" }} get .Secrets "password" {{ "}}" }}@spreadsheet-analyser-pg-cluster-rw:5432/spreadsheet_analyser'
+
+# PostgreSQL is run by CloudNativePG (the `cnpg` cluster below), not by the bundled chart. Redis and the object
+# storage are external: nothing is self-hosted for them.
+postgres:
+  enabled: false
+
+rustfs:
+  enabled: false
+
+cnpg:
+  enabled: true
+  # The read-write Service is `<fullnameOverride>-rw`: it is the host of DATABASE_URL (`spreadsheet-analyser-db`).
+  fullnameOverride: "spreadsheet-analyser-pg-cluster"
+  mode: "standalone"
+  cluster:
+    imageName: "ghcr.io/cloudnative-pg/postgresql:17.7"
+    initdb:
+      database: "spreadsheet_analyser"
+      owner: "spreadsheet_analyser"
+      secret:
+        name: "spreadsheet-analyser-db-appuser"
+    monitoring:
+      enabled: true
