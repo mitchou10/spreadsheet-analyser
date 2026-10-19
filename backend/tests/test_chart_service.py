@@ -194,3 +194,16 @@ def test_an_inconsistent_chart_spec_is_refused(spec) -> None:
 )
 def test_the_chart_kinds_the_agent_can_ask_for(spec) -> None:
     assert ChartSpec(**spec).type == spec["type"]
+
+
+async def test_regenerating_an_answer_deletes_its_charts(session, dispatcher, storage, drawn) -> None:
+    chart = await drawn.charts.create(drawn.run.id, drawn.query.id, SPEC)
+    await storage.put_object(chart.s3_key, PNG)
+    service = RunService(session, dispatcher, storage)
+    await service.complete(drawn.run.id, "Voici le graphique.")
+
+    await service.retry(ALICE, drawn.run.conversation_id)
+
+    assert chart.s3_key not in storage.objects
+    with pytest.raises(NotFoundError):
+        await drawn.charts.read_image(ALICE, drawn.run.conversation_id, drawn.run.answer_message_id, chart.id)

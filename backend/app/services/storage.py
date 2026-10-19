@@ -51,6 +51,11 @@ def conversation_prefix(conversation_id: uuid.UUID) -> str:
     return _join(key_prefix(), "conversations", conversation_id) + "/"
 
 
+def message_prefix(conversation_id: uuid.UUID, message_id: uuid.UUID) -> str:
+    """Everything stored under one answer (its charts)."""
+    return f"{conversation_prefix(conversation_id)}{message_id}/"
+
+
 def chart_key(conversation_id: uuid.UUID, message_id: uuid.UUID, chart_id: uuid.UUID) -> str:
     """A chart of an answer: by conversation, then by the message that shows it."""
     return f"{conversation_prefix(conversation_id)}{message_id}/{chart_id}.png"

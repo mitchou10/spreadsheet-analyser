@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy import tuple_
 
-from app.models import Message
+from app.models import Message, MessageRole
 from app.repositories.base import BaseRepository
 
 
@@ -18,6 +18,14 @@ class MessageRepository(BaseRepository[Message]):
         return await self._first(
             self._select()
             .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+
+    async def last_user_by_conversation(self, conversation_id: uuid.UUID) -> Message | None:
+        return await self._first(
+            self._select()
+            .where(Message.conversation_id == conversation_id, Message.role == MessageRole.USER)
             .order_by(Message.created_at.desc(), Message.id.desc())
             .limit(1)
         )

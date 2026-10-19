@@ -1,11 +1,18 @@
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { Message } from '@/types/conversation'
-import { Bot, User } from 'lucide-react'
+import { Bot, RotateCcw, User } from 'lucide-react'
 import { Markdown } from './Markdown'
 import { MessageSources } from './MessageSources'
 import { ScopeChip } from './ScopeChip'
 
-export function MessageBubble({ message }: { message: Message }) {
+interface MessageBubbleProps {
+  message: Message
+  // Given only for the last answer: replaces it by a new one.
+  onRegenerate?: () => void
+}
+
+export function MessageBubble({ message, onRegenerate }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const hasSources = message.scope.collections.length > 0 || message.scope.files.length > 0
 
@@ -30,6 +37,12 @@ export function MessageBubble({ message }: { message: Message }) {
           {isUser ? message.content : <Markdown>{message.content}</Markdown>}
         </div>
         {!isUser && message.trace && <MessageSources trace={message.trace} />}
+        {onRegenerate && (
+          <Button type="button" size="sm" variant="ghost" className="text-muted-foreground" onClick={onRegenerate}>
+            <RotateCcw className="size-3.5" aria-hidden />
+            Régénérer
+          </Button>
+        )}
         {isUser && hasSources && (
           <ul className="flex flex-wrap justify-end gap-1.5" aria-label="Sources de la question">
             {message.scope.collections.map((c) => (

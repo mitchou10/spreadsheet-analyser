@@ -11,6 +11,7 @@ from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, File, Message, Messa
 from app.repositories import (
     AccessCollectionRepository,
     AnalysisRepository,
+    ChartRepository,
     CollectionRepository,
     FileRepository,
     MessageRepository,
@@ -20,6 +21,7 @@ from app.services.actor import Actor, normalize_email
 from app.services.conversation import ConversationService
 from app.services.dispatcher import RunDispatcher
 from app.services.errors import ConflictError, NotFoundError
+from app.services.storage import StorageService, message_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +97,12 @@ class Account:
 
 
 class RunService:
-    def __init__(self, session: AsyncSession, dispatcher: RunDispatcher) -> None:
+    def __init__(self, session: AsyncSession, dispatcher: RunDispatcher, storage: StorageService | None = None) -> None:
         self.session = session
         self.dispatcher = dispatcher
+        # Only needed to delete the charts of an answer that is regenerated.
+        self.storage = storage
+        self.charts = ChartRepository(session)
         self.runs = RunRepository(session)
         self.messages = MessageRepository(session)
         self.collections = CollectionRepository(session)
@@ -161,28 +166,46 @@ class RunService:
         model: str | None = None,
         default_model: str | None = None,
     ) -> Run:
-        """Queues a new run on the last user message, when it got no answer (its run failed or was cancelled): the
-        user does not retype it, and the conversation does not get a duplicate message. The run keeps the scope of
-        the message, minus what the person can no longer read. `model` switches the conversation's model first
-        (validating it is the caller's job). Validation order matters: nothing is written before it all passes."""
+        """Queues a new run on the last user message, so the person does not retype it and the conversation does
+        not get a duplicate message. Two cases, both only for the last exchange:
+        - the message got no answer (its run failed or was cancelled): the run is simply queued again;
+        - the message was answered: the answer, with its charts, is deleted first and the run replaces it. It is
+          deleted right away, not once the new one is ready: the agent must not see its previous answer in the
+          history, and a failed run then leaves the "retry" case.
+        The run keeps the scope of the message, minus what the person can no longer read. `model` switches the
+        conversation's model first (validating it is the caller's job). Nothing is written before every check
+        passes."""
         conversation = await self.conversations.get(actor, conversation_id)
         if await self.runs.get_active_for_conversation(conversation.id) is not None:
             raise ConflictError("The assistant is still answering the previous message")
         last = await self.messages.last_by_conversation(conversation.id)
-        if last is None or last.role != MessageRole.USER:
-            raise ConflictError("Only the last message, when it has no answer, can be retried")
+        answer: Message | None = None
+        if last is not None and last.role == MessageRole.USER:
+            trigger = last
+        elif last is not None and last.role == MessageRole.ASSISTANT:
+            answer, trigger = last, await self.messages.last_user_by_conversation(conversation.id)
+        else:
+            trigger = None
+        if trigger is None:
+            raise ConflictError("Only the last message can be run again")
 
         # The scope was checked when the message was sent: access may have been revoked since.
-        last.collections = [c for c in last.collections if await self.conversations.access.can_read(actor, c)]
-        readable_ids = {c.id for c in await self._readable(actor, last.files)}
-        last.files = [f for f in last.files if f.id in readable_ids]
+        trigger.collections = [c for c in trigger.collections if await self.conversations.access.can_read(actor, c)]
+        readable_ids = {f.id for f in await self._readable(actor, trigger.files)}
+        trigger.files = [f for f in trigger.files if f.id in readable_ids]
         if model:
             conversation.model = model
+
+        answer_prefix = None
+        if answer is not None:
+            answer_prefix = message_prefix(conversation.id, answer.id)
+            await self.charts.delete_by_message(answer.id)
+            await self.messages.delete(answer)
 
         run = await self.runs.add(
             Run(
                 conversation_id=conversation.id,
-                message_id=last.id,
+                message_id=trigger.id,
                 model=conversation.model or default_model or None,
                 requester_email=normalize_email(actor.email) or None,
             )
@@ -190,6 +213,11 @@ class RunService:
         conversation.updated_at = func.now()
         await self.session.commit()
         await self.session.refresh(conversation)
+        if answer_prefix is not None and self.storage is not None:  # the charts of the replaced answer
+            try:
+                await self.storage.delete_prefix(answer_prefix)
+            except Exception:
+                logger.exception("Could not delete the charts under %s", answer_prefix)
         await self._enqueue(run)
         return run
 

@@ -124,11 +124,18 @@ export function useConversations(activeId: string | null) {
     setIsLoadingOlder(false)
   }
 
-  /** Asks the assistant again about the last message, when its run failed or was cancelled. */
+  /** Asks the assistant again about the last message: after a failed or cancelled run, or to replace its answer. */
   const retry = (model?: string) =>
     run_(async () => {
       if (!activeId) return
-      setRun({ conversationId: activeId, run: await api.retryRun(activeId, model) })
+      const started = await api.retryRun(activeId, model)
+      // The backend deleted the answer it replaces.
+      setMessages((prev) =>
+        prev.loaded === activeId && prev.items[prev.items.length - 1]?.role === 'assistant'
+          ? { ...prev, items: prev.items.slice(0, -1) }
+          : prev,
+      )
+      setRun({ conversationId: activeId, run: started })
     })
 
   const cancel = () =>

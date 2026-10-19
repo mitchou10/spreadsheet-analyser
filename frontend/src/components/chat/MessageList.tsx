@@ -48,6 +48,8 @@ export function MessageList({
   const lastIsMine = messages[messages.length - 1]?.role === 'user'
   // The last message got no answer and nothing is running: its run failed or was cancelled.
   const canRetry = lastIsMine && !isAnswering
+  // The last answer can be replaced by a new one.
+  const lastAnswerId = messages[messages.length - 1]?.role === 'assistant' && !isAnswering ? last : null
 
   useLayoutEffect(() => {
     const element = scroller.current
@@ -96,7 +98,11 @@ export function MessageList({
             </p>
           )}
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onRegenerate={message.id === lastAnswerId ? onRetry : undefined}
+            />
           ))}
           {isAnswering && <p className="animate-pulse text-sm text-muted-foreground">L'assistant réfléchit…</p>}
           {canRetry && (

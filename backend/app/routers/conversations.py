@@ -128,7 +128,7 @@ async def send_message(
 @router.post(
     "/{conversation_id}/runs/retry",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Run the assistant again on the last message, when it got no answer (failed or cancelled run)",
+    summary="Run the assistant again on the last message (retry a failed run, or replace the last answer)",
 )
 async def retry_run(
     conversation_id: uuid.UUID,
@@ -137,8 +137,9 @@ async def retry_run(
     catalog: ModelCatalogDep,
     body: RunRetryIn | None = None,
 ) -> RunOut:
-    """Same scope as the message, no new message. `model` switches the conversation's model first.
-    409 while a run is in progress, or when the last message already has an answer."""
+    """Same scope as the message, no new message. If the message was already answered, that answer (and its
+    charts) is deleted and replaced. `model` switches the conversation's model first.
+    409 while a run is in progress, or when the conversation has no message to run again."""
     model = body.model if body else None
     await _check_model(catalog, model)
     run = await service.retry(actor, conversation_id, model=model, default_model=await catalog.resolve_default())
