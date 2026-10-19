@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.4...v0.8.0) (2026-10-19)
+
+
+### Features
+
+* **frontend:** set the API URL at runtime from API_BASE_URL ([8769872](https://github.com/mitchou10/spreadsheet-analyser/commit/876987200f0adf35a7e18d76d92c325a7762df8f))
+
 ## [0.7.4](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.3...v0.7.4) (2026-10-19)
 
 
