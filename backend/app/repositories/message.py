@@ -14,6 +14,14 @@ class MessageRepository(BaseRepository[Message]):
             self._select().where(Message.conversation_id == conversation_id).order_by(Message.created_at, Message.id)
         )
 
+    async def last_by_conversation(self, conversation_id: uuid.UUID) -> Message | None:
+        return await self._first(
+            self._select()
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+
     async def page_by_conversation(
         self, conversation_id: uuid.UUID, limit: int, before: Message | None = None
     ) -> tuple[list[Message], bool]:

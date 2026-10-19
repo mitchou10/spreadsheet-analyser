@@ -304,3 +304,65 @@ async def test_account_cuts_the_lists_of_files_when_there_are_too_many(
     assert sum(len(c.files) for c in account.collections) == 2
     assert account.truncated is True
     assert len(account.collections) == 3  # every collection is still listed
+
+
+async def test_retry_queues_a_new_run_on_the_same_message(session, dispatcher, setup) -> None:
+    service, conversation = setup
+    dispatcher.fail = True
+    message, failed = await service.send_message(ALICE, conversation.id, "Résume")
+    assert failed.status == RunStatus.FAILED
+    dispatcher.fail = False
+
+    run = await service.retry(ALICE, conversation.id)
+
+    assert run.status == RunStatus.QUEUED
+    assert run.id != failed.id
+    assert run.message_id == message.id
+    assert dispatcher.enqueued == [run.id]
+    history = await ConversationService(session).list_messages(ALICE, conversation.id)
+    assert [m.content for m in history] == ["Résume"]  # no duplicate message
+
+
+async def test_retry_after_a_cancel(setup) -> None:
+    service, conversation = setup
+    _, run = await service.send_message(ALICE, conversation.id, "Résume")
+    await service.cancel(ALICE, run.id)
+
+    retried = await service.retry(ALICE, conversation.id, model="other-model")
+
+    assert retried.status == RunStatus.QUEUED
+    assert retried.model == "other-model"
+
+
+async def test_retry_refused_while_a_run_is_active(setup) -> None:
+    service, conversation = setup
+    await service.send_message(ALICE, conversation.id, "Résume")
+
+    with pytest.raises(ConflictError):
+        await service.retry(ALICE, conversation.id)
+
+
+async def test_retry_refused_when_the_last_message_has_an_answer(setup) -> None:
+    service, conversation = setup
+    _, run = await service.send_message(ALICE, conversation.id, "Résume")
+    await service.start(run.id)
+    await service.complete(run.id, "done")
+
+    with pytest.raises(ConflictError):
+        await service.retry(ALICE, conversation.id)
+
+
+async def test_retry_refused_on_an_empty_conversation(setup) -> None:
+    service, conversation = setup
+
+    with pytest.raises(ConflictError):
+        await service.retry(ALICE, conversation.id)
+
+
+async def test_retry_is_private_to_the_owner(dispatcher, setup) -> None:
+    service, conversation = setup
+    dispatcher.fail = True
+    await service.send_message(ALICE, conversation.id, "Résume")
+
+    with pytest.raises(NotFoundError):
+        await service.retry(BOB, conversation.id)

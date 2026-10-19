@@ -124,6 +124,13 @@ export function useConversations(activeId: string | null) {
     setIsLoadingOlder(false)
   }
 
+  /** Asks the assistant again about the last message, when its run failed or was cancelled. */
+  const retry = (model?: string) =>
+    run_(async () => {
+      if (!activeId) return
+      setRun({ conversationId: activeId, run: await api.retryRun(activeId, model) })
+    })
+
   const cancel = () =>
     run_(async () => {
       if (!pendingRun) return
@@ -150,6 +157,7 @@ export function useConversations(activeId: string | null) {
     error,
     clearError: () => setError(null),
     send,
+    retry,
     cancel,
     remove,
   }

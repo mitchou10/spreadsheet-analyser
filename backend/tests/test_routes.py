@@ -241,6 +241,28 @@ async def _send(client, conversation_id: str, content: str = "q") -> dict:
     return response
 
 
+async def test_retry_run_on_the_last_message(client, dispatcher) -> None:
+    conversation = (await client.post("/api/conversations", json={})).json()
+    url = f"/api/conversations/{conversation['id']}/runs/retry"
+    assert (await client.post(url)).status_code == 409  # nothing to retry yet
+
+    sent = (await _send(client, conversation["id"], "Résume")).json()
+    assert (await client.post(url)).status_code == 409  # still answering
+    await client.post(f"/api/runs/{sent['run']['id']}/cancel")
+
+    retried = await client.post(url)
+
+    assert retried.status_code == 202
+    assert retried.json()["status"] == "queued"
+    assert retried.json()["message_id"] == sent["message"]["id"]
+    assert retried.json()["id"] != sent["run"]["id"]
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
+    assert len(messages) == 1
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.post(url)).status_code == 404
+
+
 async def test_run_flow_through_internal_api(client, dispatcher, monkeypatch) -> None:
     monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
     worker = {"Authorization": "Bearer secret"}

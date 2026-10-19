@@ -4,9 +4,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, Message, MessageRole, Run, RunStatus
+from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, File, Message, MessageRole, Run, RunStatus
 from app.repositories import (
     AccessCollectionRepository,
     AnalysisRepository,
@@ -150,16 +151,47 @@ class RunService:
             except Exception:
                 logger.exception("Could not enqueue the rebuild of a user's search index")
 
-        # After the commit: the worker must be able to see the run as soon as it receives the task.
-        try:
-            run.task_id = await self.dispatcher.enqueue(run.id)
-        except Exception:
-            logger.exception("Could not enqueue run %s", run.id)
-            await self._finish(run, RunStatus.FAILED, error="The worker is unreachable, please retry")
-        else:
-            await self.session.commit()
-            await self.session.refresh(run)
+        await self._enqueue(run)
         return message, run
+
+    async def retry(
+        self,
+        actor: Actor,
+        conversation_id: uuid.UUID,
+        model: str | None = None,
+        default_model: str | None = None,
+    ) -> Run:
+        """Queues a new run on the last user message, when it got no answer (its run failed or was cancelled): the
+        user does not retype it, and the conversation does not get a duplicate message. The run keeps the scope of
+        the message, minus what the person can no longer read. `model` switches the conversation's model first
+        (validating it is the caller's job). Validation order matters: nothing is written before it all passes."""
+        conversation = await self.conversations.get(actor, conversation_id)
+        if await self.runs.get_active_for_conversation(conversation.id) is not None:
+            raise ConflictError("The assistant is still answering the previous message")
+        last = await self.messages.last_by_conversation(conversation.id)
+        if last is None or last.role != MessageRole.USER:
+            raise ConflictError("Only the last message, when it has no answer, can be retried")
+
+        # The scope was checked when the message was sent: access may have been revoked since.
+        last.collections = [c for c in last.collections if await self.conversations.access.can_read(actor, c)]
+        readable_ids = {c.id for c in await self._readable(actor, last.files)}
+        last.files = [f for f in last.files if f.id in readable_ids]
+        if model:
+            conversation.model = model
+
+        run = await self.runs.add(
+            Run(
+                conversation_id=conversation.id,
+                message_id=last.id,
+                model=conversation.model or default_model or None,
+                requester_email=normalize_email(actor.email) or None,
+            )
+        )
+        conversation.updated_at = func.now()
+        await self.session.commit()
+        await self.session.refresh(conversation)
+        await self._enqueue(run)
+        return run
 
     async def get(self, actor: Actor, run_id: uuid.UUID) -> Run:
         run = await self.runs.get(run_id)
@@ -321,6 +353,27 @@ class RunService:
         return await self._finish(run, RunStatus.FAILED, error=error[:4000])
 
     # --- internals ---
+
+    async def _enqueue(self, run: Run) -> None:
+        """Hands a committed run to the worker; if the worker is unreachable the run fails instead of hanging."""
+        # After the commit: the worker must be able to see the run as soon as it receives the task.
+        try:
+            run.task_id = await self.dispatcher.enqueue(run.id)
+        except Exception:
+            logger.exception("Could not enqueue run %s", run.id)
+            await self._finish(run, RunStatus.FAILED, error="The worker is unreachable, please retry")
+        else:
+            await self.session.commit()
+            await self.session.refresh(run)
+
+    async def _readable(self, actor: Actor, files: Sequence[File]) -> list[File]:
+        """The files whose collection the person can still read."""
+        readable = []
+        for file in files:
+            collection = await self.collections.get(file.collection_id)
+            if collection is not None and await self.conversations.access.can_read(actor, collection):
+                readable.append(file)
+        return readable
 
     async def _require(self, run_id: uuid.UUID) -> Run:
         run = await self.runs.get(run_id)

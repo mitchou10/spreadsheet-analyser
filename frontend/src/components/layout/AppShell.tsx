@@ -125,6 +125,7 @@ export function AppShell() {
                     collections={backend.collections}
                     onSend={handleSend}
                     onCancel={chat.cancel}
+                    onRetry={() => chat.retry(selectedModel ?? undefined)}
                     onCollectionsChanged={backend.refreshCollections}
                   />
                 )
