@@ -3,7 +3,8 @@ import logging
 from fastapi import APIRouter, Response, status
 
 from app.connectors import StorageConnector, db_connector, redis_connector
-from app.dependencies import StorageDep
+from app.dependencies import ActorDep, StorageDep
+from app.version import app_version
 
 logger = logging.getLogger(__name__)
 
@@ -33,3 +34,8 @@ async def get_health(response: Response, storage: StorageDep) -> dict:
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
 
     return {"status": api_status, "dependencies": dependencies}
+
+
+@router.get("/version", summary="Version of the application (for signed-in users)")
+async def get_version(_: ActorDep) -> dict[str, str]:
+    return {"version": app_version()}

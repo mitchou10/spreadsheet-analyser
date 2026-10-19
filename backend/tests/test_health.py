@@ -29,3 +29,14 @@ async def test_storage_connector_reports_why_s3_is_unhealthy() -> None:
         "endpoint": "https://s3.example.org",
         "error": "ConnectionError: no route to host",
     }
+
+
+async def test_version_is_the_one_of_the_package() -> None:
+    from importlib.metadata import version
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/version")
+
+    assert response.status_code == 200
+    assert response.json() == {"version": version("backend")}

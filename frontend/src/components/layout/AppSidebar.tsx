@@ -25,6 +25,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar'
 import { useCurrentUser } from '@/auth/AuthContext'
+import { useAppVersion } from '@/hooks/useAppVersion'
 import type { Conversation } from '@/types/conversation'
 import { FileSpreadsheet, LogOut, Shield, SquarePen, Trash2 } from 'lucide-react'
 
@@ -52,6 +53,7 @@ export function AppSidebar({
   onShowAdmin,
 }: AppSidebarProps) {
   const { user, logout } = useCurrentUser()
+  const version = useAppVersion()
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
 
   return (
@@ -126,6 +128,14 @@ export function AppSidebar({
             </SidebarMenuItem>
           </SidebarMenu>
         )}
+        <p
+          className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
+          title={`Interface ${version.frontend}${version.backend ? ` · Serveur ${version.backend}` : ''}`}
+        >
+          {version.backend && version.backend !== version.frontend
+            ? `interface v${version.frontend} · serveur v${version.backend}`
+            : `v${version.frontend}`}
+        </p>
       </SidebarFooter>
 
       <AlertDialog
