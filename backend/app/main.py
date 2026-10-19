@@ -28,6 +28,7 @@ from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
 from app.services import ConflictError, EphemeralService, ForbiddenError, InvalidRequestError, NotFoundError
+from app.version import app_version
 
 _keycloak_settings = KeycloakSettings()
 
@@ -78,6 +79,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(
     lifespan=lifespan,
     title="spreadsheet-analyser API",
+    version=app_version(),
     docs_url="/api/docs",
     redoc_url="/api/redocs",
     openapi_url="/api/openapi.json",
