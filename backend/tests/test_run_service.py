@@ -9,9 +9,9 @@ from tests.actors import ALICE, BOB
 
 
 @pytest.fixture
-async def setup(session, dispatcher):
+async def setup(session, dispatcher, storage):
     conversation = await ConversationService(session).create(ALICE)
-    return RunService(session, dispatcher), conversation
+    return RunService(session, dispatcher, storage), conversation
 
 
 async def test_send_message_stores_message_and_queues_run(session, dispatcher, setup) -> None:
@@ -342,14 +342,51 @@ async def test_retry_refused_while_a_run_is_active(setup) -> None:
         await service.retry(ALICE, conversation.id)
 
 
-async def test_retry_refused_when_the_last_message_has_an_answer(setup) -> None:
+async def test_retry_replaces_the_last_answer(session, dispatcher, setup) -> None:
+    service, conversation = setup
+    message, run = await service.send_message(ALICE, conversation.id, "Résume")
+    await service.start(run.id)
+    answered = await service.complete(run.id, "première réponse")
+
+    regenerated = await service.retry(ALICE, conversation.id)
+
+    assert regenerated.status == RunStatus.QUEUED
+    assert regenerated.message_id == message.id and regenerated.id != run.id
+    history = await ConversationService(session).list_messages(ALICE, conversation.id)
+    assert [(m.role, m.content) for m in history] == [(MessageRole.USER, "Résume")]  # the old answer is gone
+    context = await service.context(regenerated.id)
+    assert context.messages == [{"role": "user", "content": "Résume"}]  # the agent does not see its old answer
+    await service.start(regenerated.id)
+    await service.complete(regenerated.id, "nouvelle réponse")
+    history = await ConversationService(session).list_messages(ALICE, conversation.id)
+    assert [m.content for m in history] == ["Résume", "nouvelle réponse"]
+    assert answered.result_message_id not in {m.id for m in history}
+
+
+async def test_only_the_last_answer_is_replaced(session, setup) -> None:
+    service, conversation = setup
+    for text in ("one", "two"):
+        _, run = await service.send_message(ALICE, conversation.id, text)
+        await service.start(run.id)
+        await service.complete(run.id, f"answer {text}")
+
+    await service.retry(ALICE, conversation.id)
+
+    history = await ConversationService(session).list_messages(ALICE, conversation.id)
+    assert [m.content for m in history] == ["one", "answer one", "two"]
+
+
+async def test_a_failed_regeneration_can_be_retried(setup) -> None:
     service, conversation = setup
     _, run = await service.send_message(ALICE, conversation.id, "Résume")
     await service.start(run.id)
     await service.complete(run.id, "done")
+    regenerated = await service.retry(ALICE, conversation.id)
+    await service.fail(regenerated.id, "boom")
 
-    with pytest.raises(ConflictError):
-        await service.retry(ALICE, conversation.id)
+    again = await service.retry(ALICE, conversation.id)
+
+    assert again.status == RunStatus.QUEUED
 
 
 async def test_retry_refused_on_an_empty_conversation(setup) -> None:

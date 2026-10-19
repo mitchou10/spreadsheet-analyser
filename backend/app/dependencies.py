@@ -74,8 +74,10 @@ AnalysisServiceDep = Annotated[AnalysisService, Depends(get_analysis_service)]
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]
 
 
-def get_run_service(session: SessionDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]) -> RunService:
-    return RunService(session, dispatcher)
+def get_run_service(
+    session: SessionDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)], storage: StorageDep
+) -> RunService:
+    return RunService(session, dispatcher, storage)
 
 
 RunServiceDep = Annotated[RunService, Depends(get_run_service)]
