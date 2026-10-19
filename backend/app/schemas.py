@@ -4,7 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models import AnalysisStatus, ChartStatus, ConversationStatus, MessageRole, RunStatus, SqlQueryStatus
+from app.models import (
+    AnalysisStatus,
+    ChartStatus,
+    ConversationStatus,
+    FeedbackRating,
+    FeedbackReason,
+    MessageRole,
+    RunStatus,
+    SqlQueryStatus,
+)
 
 
 class CollectionCreate(BaseModel):
@@ -132,6 +141,21 @@ class MessageSourceFile(BaseModel):
     collection_name: str
 
 
+class FeedbackIn(BaseModel):
+    rating: FeedbackRating
+    reason: FeedbackReason | None = None
+    # Free text, optional: what was wrong (or good).
+    comment: str | None = Field(default=None, max_length=2000)
+
+
+class FeedbackOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    rating: FeedbackRating
+    reason: FeedbackReason | None
+    comment: str | None
+
+
 class MessageOut(BaseModel):
     id: uuid.UUID
     conversation_id: uuid.UUID
@@ -146,6 +170,8 @@ class MessageOut(BaseModel):
     files: list[MessageSourceFile]
     # Assistant answers only: how it was produced (plan, files consulted, tool calls).
     trace: RunTrace | None = None
+    # The caller's own thumbs up/down on an assistant answer (null = none given).
+    feedback: FeedbackOut | None = None
     created_at: datetime
 
 
@@ -463,6 +489,24 @@ class CollectionAudienceOut(BaseModel):
 
 class UserCollectionsOut(BaseModel):
     collection_ids: list[uuid.UUID]
+
+
+class FeedbackReviewOut(BaseModel):
+    """A feedback with the exchange it is about (administrators)."""
+
+    feedback_id: uuid.UUID
+    rating: FeedbackRating
+    reason: FeedbackReason | None
+    comment: str | None
+    user_id: str
+    created_at: datetime
+    updated_at: datetime
+    conversation_id: uuid.UUID
+    message_id: uuid.UUID
+    question: str | None
+    answer: str | None
+    model: str | None
+    run_id: uuid.UUID | None
 
 
 class UserIndexRebuildIn(BaseModel):

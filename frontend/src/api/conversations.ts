@@ -1,5 +1,5 @@
 import { apiFetch, jsonBody } from '@/lib/api'
-import type { Conversation, Message, MessageScope, Run, RunStatus } from '@/types/conversation'
+import type { Conversation, Feedback, Message, MessageScope, Run, RunStatus } from '@/types/conversation'
 
 interface ConversationDto {
   id: string
@@ -18,6 +18,7 @@ interface MessageDto {
     files: { file_id: string; file_name: string; collection_name: string }[]
     steps: { tool: string; arguments: Record<string, unknown>; output: string }[]
   } | null
+  feedback?: Feedback | null
 }
 
 interface RunDto {
@@ -43,6 +44,7 @@ const toMessage = (dto: MessageDto): Message[] =>
                 steps: dto.trace.steps,
               }
             : null,
+          feedback: dto.feedback ?? null,
           scope: {
             collections: dto.collections ?? [],
             files: (dto.files ?? []).map((f) => ({
@@ -107,6 +109,16 @@ export async function sendMessage(
   })
   return { messages: toMessage(sent.message), run: toRun(sent.run) }
 }
+
+/** Thumbs up/down on an answer; voting again replaces the previous feedback. */
+export const putFeedback = (conversationId: string, messageId: string, feedback: Partial<Feedback> & { rating: Feedback['rating'] }) =>
+  apiFetch<Feedback>(`/conversations/${conversationId}/messages/${messageId}/feedback`, {
+    method: 'PUT',
+    body: jsonBody({ rating: feedback.rating, reason: feedback.reason ?? null, comment: feedback.comment ?? null }),
+  })
+
+export const deleteFeedback = (conversationId: string, messageId: string) =>
+  apiFetch<void>(`/conversations/${conversationId}/messages/${messageId}/feedback`, { method: 'DELETE' })
 
 export const getActiveRun = async (conversationId: string): Promise<Run | null> => {
   const run = await apiFetch<RunDto | null>(`/conversations/${conversationId}/active-run`)

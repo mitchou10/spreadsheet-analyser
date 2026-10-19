@@ -15,6 +15,7 @@ from app.services import (
     ChartService,
     CollectionService,
     ConversationService,
+    FeedbackService,
     FileService,
     RunService,
     SqlQueryService,
@@ -117,6 +118,13 @@ def get_admin(user: Annotated[RequestContext, Depends(get_current_user)]) -> Act
 
 
 AdminDep = Annotated[Actor, Depends(get_admin)]
+
+
+def get_feedback_service(session: SessionDep) -> FeedbackService:
+    return FeedbackService(session)
+
+
+FeedbackServiceDep = Annotated[FeedbackService, Depends(get_feedback_service)]
 
 
 def get_admin_service(

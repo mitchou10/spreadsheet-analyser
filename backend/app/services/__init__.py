@@ -4,7 +4,8 @@ from app.services.analysis import AnalysisService
 from app.services.chart import ChartService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
-from app.services.errors import ConflictError, ForbiddenError, NotFoundError
+from app.services.errors import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError
+from app.services.feedback import FeedbackService
 from app.services.file import FileService
 from app.services.run import RunService
 from app.services.sql_query import SqlQueryService
@@ -15,10 +16,12 @@ __all__ = [
     "AdminService",
     "ConflictError",
     "ForbiddenError",
+    "InvalidRequestError",
     "AnalysisService",
     "ChartService",
     "CollectionService",
     "ConversationService",
+    "FeedbackService",
     "FileService",
     "NotFoundError",
     "RunService",

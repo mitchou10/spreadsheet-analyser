@@ -7,6 +7,16 @@ export interface MessageTrace {
   steps: { tool: string; arguments: Record<string, unknown>; output: string }[]
 }
 
+export type FeedbackRating = 'up' | 'down'
+export type FeedbackReason = 'wrong_result' | 'wrong_files' | 'incomplete' | 'unclear' | 'other'
+
+/** My thumbs up/down on an answer, with why. */
+export interface Feedback {
+  rating: FeedbackRating
+  reason: FeedbackReason | null
+  comment: string | null
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -15,6 +25,8 @@ export interface Message {
   scope: MessageScope
   // Assistant answers only (null for older answers and for user messages).
   trace: MessageTrace | null
+  // Assistant answers only: my feedback (null = none given).
+  feedback: Feedback | null
 }
 
 export interface Conversation {

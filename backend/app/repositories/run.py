@@ -15,5 +15,8 @@ class RunRepository(BaseRepository[Run]):
             .limit(1)
         )
 
+    async def get_by_result_message(self, message_id: uuid.UUID) -> Run | None:
+        return await self._first(self._select().where(Run.result_message_id == message_id).limit(1))
+
     async def list_by_conversation(self, conversation_id: uuid.UUID) -> list[Run]:
         return await self._all(self._select().where(Run.conversation_id == conversation_id).order_by(Run.created_at))

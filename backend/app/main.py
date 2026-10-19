@@ -18,7 +18,7 @@ from app.routers.models import router as models_router
 from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
-from app.services import ConflictError, ForbiddenError, NotFoundError
+from app.services import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError
 
 _keycloak_settings = KeycloakSettings()
 
@@ -84,6 +84,11 @@ async def not_found_handler(_: Request, error: NotFoundError) -> JSONResponse:
 @app.exception_handler(ForbiddenError)
 async def forbidden_handler(_: Request, error: ForbiddenError) -> JSONResponse:
     return JSONResponse(status_code=403, content={"detail": str(error)})
+
+
+@app.exception_handler(InvalidRequestError)
+async def invalid_request_handler(_: Request, error: InvalidRequestError) -> JSONResponse:
+    return JSONResponse(status_code=422, content={"detail": str(error)})
 
 
 @app.exception_handler(ConflictError)

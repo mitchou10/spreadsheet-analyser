@@ -7,7 +7,15 @@ from app.core.security.factory import RequestContext, get_current_user
 from app.db import get_session
 from app.dependencies import get_dispatcher, get_model_catalog, get_storage
 from app.main import app
-from app.services import Actor, AdminService, CollectionService, ConflictError, FileService, NotFoundError
+from app.services import (
+    Actor,
+    AdminService,
+    CollectionService,
+    ConflictError,
+    FileService,
+    NotFoundError,
+    RunService,
+)
 from tests.actors import ALICE, BOB
 
 # --- service ---
@@ -135,6 +143,7 @@ async def test_admin_routes_are_forbidden_to_non_admins(api) -> None:
 
     assert (await api.get("/api/admin/collections")).status_code == 403
     assert (await api.get("/api/admin/people")).status_code == 403
+    assert (await api.get("/api/admin/feedback")).status_code == 403
     assert (await api.post(f"/api/admin/collections/{some_id}/access", json={"email": "a@b.c"})).status_code == 403
     assert (await api.delete(f"/api/admin/collections/{some_id}/access/a@b.c")).status_code == 403
 
@@ -218,3 +227,28 @@ async def test_admin_can_ask_for_a_person_s_index_to_be_rebuilt(api, dispatcher)
 
     dispatcher.fail = True
     assert (await api.post("/api/admin/users/search-index", json={"email": "marie@example.fr"})).status_code == 503
+
+
+async def test_admin_reads_the_feedback_with_the_exchange(api, session, dispatcher) -> None:
+    login_as(admin=False, user_id="alice", email=ALICE.email)
+    conversation = (await api.post("/api/conversations", json={})).json()
+    sent = (await api.post(f"/api/conversations/{conversation['id']}/messages", json={"content": "Résume"})).json()
+    runs = RunService(session, dispatcher)
+    await runs.start(uuid.UUID(sent["run"]["id"]))
+    answer = (await runs.complete(uuid.UUID(sent["run"]["id"]), "Voici.")).result_message_id
+    await api.put(
+        f"/api/conversations/{conversation['id']}/messages/{answer}/feedback",
+        json={"rating": "down", "reason": "unclear", "comment": "peu clair"},
+    )
+
+    login_as(admin=True)
+    [item] = (await api.get("/api/admin/feedback", params={"rating": "down"})).json()
+    assert (item["question"], item["answer"], item["reason"], item["comment"], item["user_id"]) == (
+        "Résume",
+        "Voici.",
+        "unclear",
+        "peu clair",
+        "alice",
+    )
+    assert (await api.get("/api/admin/feedback", params={"rating": "up"})).json() == []
+    assert (await api.get("/api/admin/feedback", params={"limit": 0})).status_code == 422

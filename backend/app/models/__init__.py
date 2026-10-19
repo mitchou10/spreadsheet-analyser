@@ -4,6 +4,7 @@ from app.models.base import Base
 from app.models.chart import Chart, ChartStatus
 from app.models.collection import Collection
 from app.models.conversation import DEFAULT_CONVERSATION_TITLE, Conversation, ConversationStatus
+from app.models.feedback import FeedbackRating, FeedbackReason, MessageFeedback
 from app.models.file import File
 from app.models.message import Message, MessageRole, message_collections, message_files
 from app.models.run import ACTIVE_RUN_STATUSES, Run, RunStatus
@@ -25,7 +26,10 @@ __all__ = [
     "Collection",
     "Conversation",
     "ConversationStatus",
+    "FeedbackRating",
+    "FeedbackReason",
     "File",
+    "MessageFeedback",
     "Message",
     "MessageRole",
     "message_collections",
