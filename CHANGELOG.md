@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.3](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.2...v0.7.3) (2026-10-19)
+
+
+### Bug Fixes
+
+* **frontend:** call the API on the same origin by default ([d30a2fa](https://github.com/mitchou10/spreadsheet-analyser/commit/d30a2fa3ce45a3c31f2625bd729b34b4c1335970))
+* **frontend:** read the same-origin API URL from .env.production, like Muffin ([919325e](https://github.com/mitchou10/spreadsheet-analyser/commit/919325e824aba154d56520b4e09b0c6e545546b5))
+
 ## [0.7.2](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.1...v0.7.2) (2026-10-19)
 
 
