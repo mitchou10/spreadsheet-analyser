@@ -27,6 +27,9 @@ class FakeStorage:
     async def get_json(self, key: str) -> Any:
         return self.objects[key]
 
+    async def copy_object(self, source_key: str, destination_key: str) -> None:
+        self.objects[destination_key] = self.objects[source_key]
+
     async def delete_object(self, key: str) -> None:
         self.objects.pop(key, None)
 

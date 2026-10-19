@@ -35,6 +35,12 @@ class Analysis(Base):
     # <collection_id>/<file_id>/versions/<file_version>/analyse.json - only set once the analysis is READY.
     s3_key: Mapped[str | None] = mapped_column(String(1024), default=None)
     error: Mapped[str | None] = mapped_column(String(2048), default=None)
+    # ANALYSIS_REUSE_VERSION in force when the analysis was queued: results are only reused with the same one.
+    analyzer_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Set when the result was copied from the analysis of an identical file instead of being computed.
+    source_analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analyses.id", ondelete="SET NULL"), default=None
+    )
     # clock_timestamp(), not now(): now() is frozen for a whole transaction, and "latest analysis" is
     # decided by created_at, so two analyses queued in one transaction must still be ordered.
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp())

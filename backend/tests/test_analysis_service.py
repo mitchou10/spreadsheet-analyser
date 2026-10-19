@@ -224,3 +224,110 @@ async def test_the_analysis_of_a_file_written_before_the_project_level_uses_its_
     assert context.result_key == f"{file.collection_id}/{file.id}/versions/1/analyse.json"
     await storage.put_json(context.result_key, {"sheets": []})
     assert (await service.complete(analysis.id, context.result_key)).status == AnalysisStatus.READY
+
+
+# --- Reuse of the analysis of an identical file ---
+
+SHEETS = {
+    "file": {"name": "a.csv", "format": "csv", "size_bytes": 2},
+    "sheets": [{"name": "S", "table": {"columns": []}}],
+}
+
+
+async def _analysed(session, storage, dispatcher, collection_id, name: str = "a.csv", content: bytes = b"same"):
+    """A file whose analysis the worker has finished, with the Parquet table it writes next to analyse.json."""
+    file = await FileService(session, storage).upload(ALICE, collection_id, name, content)
+    service = AnalysisService(session, storage, dispatcher)
+    analysis = await service.create(ALICE, file.id)
+    await service.start(analysis.id)
+    context = await service.context(analysis.id)
+    await storage.put_json(context.result_key, {**SHEETS, "file": {**SHEETS["file"], "name": name}})
+    await storage.put_object(context.result_key.replace("analyse.json", "tables/0.parquet"), b"parquet")
+    await service.complete(analysis.id, context.result_key)
+    return file, analysis
+
+
+async def _second_file(session, storage, name: str = "b.csv", content: bytes = b"same"):
+    collection = await CollectionService(session, storage).create(BOB, "Other")
+    return await FileService(session, storage).upload(BOB, collection.id, name, content)
+
+
+async def test_an_identical_file_reuses_the_result_without_the_worker(session, storage, dispatcher) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    _, source = await _analysed(session, storage, dispatcher, collection.id)
+    other = await _second_file(session, storage)
+    queued_before = list(dispatcher.analyses)
+
+    analysis = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    assert analysis.status == AnalysisStatus.READY and analysis.source_analysis_id == source.id
+    assert dispatcher.analyses == queued_before  # the analysis worker was not asked
+    assert analysis.s3_key == f"spreadsheet-analyser/{other.collection_id}/{other.id}/versions/1/analyse.json"
+    result = await storage.get_json(analysis.s3_key)
+    assert result["file"]["name"] == "b.csv" and result["sheets"] == SHEETS["sheets"]  # only the name is the file's own
+    assert await storage.get_object(analysis.s3_key.replace("analyse.json", "tables/0.parquet")) == b"parquet"
+    assert dispatcher.indexed[-1] == analysis.id  # it is searchable like any other
+
+
+async def test_deleting_the_source_file_does_not_break_the_copy(session, storage, dispatcher) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    source_file, _ = await _analysed(session, storage, dispatcher, collection.id)
+    other = await _second_file(session, storage)
+    copy = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    await storage.delete_prefix(f"spreadsheet-analyser/{source_file.collection_id}/{source_file.id}/")
+
+    assert (await storage.get_json(copy.s3_key))["file"]["name"] == "b.csv"
+    assert copy.s3_key.replace("analyse.json", "tables/0.parquet") in storage.objects
+
+
+@pytest.mark.parametrize(
+    ("name", "content"),
+    [("b.csv", b"different"), ("b.xlsx", b"same")],
+    ids=["other content", "other extension"],
+)
+async def test_a_different_file_is_analysed(session, storage, dispatcher, name, content) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    await _analysed(session, storage, dispatcher, collection.id)
+    other = await _second_file(session, storage, name, content)
+
+    analysis = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    assert analysis.status == AnalysisStatus.PENDING and analysis.source_analysis_id is None
+    assert dispatcher.analyses[-1] == analysis.id
+
+
+async def test_a_result_made_by_another_analyzer_version_is_not_reused(
+    session, storage, dispatcher, monkeypatch
+) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    await _analysed(session, storage, dispatcher, collection.id)
+    other = await _second_file(session, storage)
+    monkeypatch.setenv("ANALYSIS_REUSE_VERSION", "2")
+
+    analysis = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    assert analysis.status == AnalysisStatus.PENDING and analysis.analyzer_version == "2"
+
+
+async def test_reuse_can_be_turned_off(session, storage, dispatcher, monkeypatch) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    await _analysed(session, storage, dispatcher, collection.id)
+    other = await _second_file(session, storage)
+    monkeypatch.setenv("ANALYSIS_REUSE", "false")
+
+    analysis = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    assert analysis.status == AnalysisStatus.PENDING
+
+
+async def test_a_failed_copy_falls_back_to_a_normal_analysis(session, storage, dispatcher) -> None:
+    collection = await CollectionService(session, storage).create(ALICE, "Sales")
+    _, source = await _analysed(session, storage, dispatcher, collection.id)
+    del storage.objects[source.s3_key.replace("analyse.json", "tables/0.parquet")]  # the table is gone
+    other = await _second_file(session, storage)
+
+    analysis = await AnalysisService(session, storage, dispatcher).create(BOB, other.id)
+
+    assert analysis.status == AnalysisStatus.PENDING and dispatcher.analyses[-1] == analysis.id
+    assert not any(str(other.id) in key for key in storage.objects if not key.endswith("/b.csv"))  # nothing left over

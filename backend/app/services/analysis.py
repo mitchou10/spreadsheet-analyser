@@ -1,11 +1,13 @@
 import logging
+import posixpath
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Analysis, AnalysisStatus
+from app.config import AnalysisSettings
+from app.models import Analysis, AnalysisStatus, File
 from app.repositories import AnalysisRepository
 from app.services.actor import Actor
 from app.services.dispatcher import RunDispatcher
@@ -49,16 +51,65 @@ class AnalysisService:
         self.storage = storage
         # None (tests, scripts): analyses are only recorded, nothing is sent to the analysis worker.
         self.dispatcher = dispatcher
+        self.settings = AnalysisSettings()
         self.analyses = AnalysisRepository(session)
         self.files = FileService(session, storage)
 
     async def create(self, actor: Actor, file_id: uuid.UUID) -> Analysis:
-        """Queues an analysis of the file's current version."""
+        """Queues an analysis of the file's current version, unless a file with the same content was already
+        analysed: its result is then copied and the analysis is ready at once (the worker is not involved)."""
         file = await self.files.get_owned(actor, file_id)
-        analysis = await self.analyses.add(Analysis(file_id=file.id, file_version=file.version))
+        analysis = await self.analyses.add(
+            Analysis(file_id=file.id, file_version=file.version, analyzer_version=self.settings.ANALYSIS_REUSE_VERSION)
+        )
         await self.session.commit()
+        if await self._reuse(analysis, file):
+            return analysis
         await self._dispatch(analysis)
         return analysis
+
+    async def _reuse(self, analysis: Analysis, file: File) -> bool:
+        """Copies the result (analyse.json and the Parquet tables of the sheets) of an analysis of an identical file
+        to where this file's own analysis would have written it. Copies, not links: deleting one file deletes its
+        own prefix and must not break the other. Any failure falls back to a normal analysis."""
+        if not self.settings.ANALYSIS_REUSE:
+            return False
+        extension = posixpath.splitext(file.name)[1]
+        source = await self.analyses.find_reusable(
+            file.file_hash, extension, self.settings.ANALYSIS_REUSE_VERSION, file.id
+        )
+        if source is None or source.s3_key is None:
+            return False
+
+        result_key = version_key(file.s3_key, file.version, "analyse.json")
+        copied: list[str] = []
+        try:
+            result = await self.storage.get_json(source.s3_key)
+            for index, sheet in enumerate(result.get("sheets", [])):
+                if sheet.get("table"):
+                    table = f"tables/{index}.parquet"
+                    destination = posixpath.join(posixpath.dirname(result_key), table)
+                    await self.storage.copy_object(posixpath.join(posixpath.dirname(source.s3_key), table), destination)
+                    copied.append(destination)
+            # The only thing in the result that belongs to the file rather than to its content.
+            result["file"] = {**result.get("file", {}), "name": file.name}
+            await self.storage.put_json(result_key, result)
+            copied.append(result_key)
+        except Exception:
+            logger.exception("Could not reuse analysis %s for file %s, analysing it instead", source.id, file.id)
+            for key in copied:
+                try:
+                    await self.storage.delete_object(key)
+                except Exception:
+                    logger.exception("Could not remove %s after a failed reuse", key)
+            return False
+
+        analysis.s3_key = result_key
+        analysis.source_analysis_id = source.id
+        await self._set_status(analysis.id, AnalysisStatus.READY)
+        await self._index_file(analysis.id)
+        logger.info("Reused analysis %s for file %s (identical content), no analysis queued", source.id, file.id)
+        return True
 
     async def _dispatch(self, analysis: Analysis) -> None:
         """After the commit, so the worker finds the row. An unreachable queue fails the analysis visibly

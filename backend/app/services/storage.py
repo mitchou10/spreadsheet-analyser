@@ -130,6 +130,13 @@ class StorageService:
     async def get_json(self, key: str) -> Any:
         return json.loads(await self.get_object(key))
 
+    async def copy_object(self, source_key: str, destination_key: str) -> None:
+        """Server-side copy inside the bucket (the bytes do not go through the backend)."""
+        async with self._client() as s3:
+            await s3.copy_object(
+                Bucket=self.bucket, Key=destination_key, CopySource={"Bucket": self.bucket, "Key": source_key}
+            )
+
     async def delete_object(self, key: str) -> None:
         async with self._client() as s3:
             await s3.delete_object(Bucket=self.bucket, Key=key)

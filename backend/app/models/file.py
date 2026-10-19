@@ -26,7 +26,7 @@ class File(Base):
     content_type: Mapped[str | None] = mapped_column(String(255), default=None)
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     # sha256 hex digest of the file content, used to detect duplicate uploads.
-    file_hash: Mapped[str] = mapped_column(String(64))
+    file_hash: Mapped[str] = mapped_column(String(64), index=True)
     # Bumped each time a new version of the same logical file is uploaded. Older versions stay in S3
     # under their own versions/<n>/ prefix; only the latest one is described by this row.
     version: Mapped[int] = mapped_column(Integer, default=1)
