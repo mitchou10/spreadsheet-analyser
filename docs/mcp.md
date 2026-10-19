@@ -8,9 +8,10 @@ au-delà de `ttl_hours`.
 Le serveur tourne dans le backend, en Streamable HTTP sous **`/mcp`** (par exemple
 `https://<hôte>/mcp`). `MCP_ENABLED=false` le désactive.
 
-Cette page est aussi dans l'application : cliquer sur la version, en bas à gauche de la barre latérale, ouvre une fenêtre
-avec les nouveautés (le journal des modifications) et la section « Connecter un agent (MCP) », dont les commandes
-contiennent déjà l'adresse du serveur (`frontend/src/content/mcp.md`).
+Le guide d'utilisation (adresse, connexion, commandes, outils, déroulé, limites) est un fichier markdown du backend,
+`backend/app/mcp/guide.md`. Il est affiché dans l'application (cliquer sur la version, en bas à gauche de la barre
+latérale, onglet « Connecter un agent (MCP) ») et servi tel quel, avec la vraie adresse du serveur, par
+`GET /api/help/mcp`. Cette page-ci est la référence pour ceux qui déploient et exploitent le serveur.
 
 ## Authentification
 

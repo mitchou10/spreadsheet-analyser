@@ -2,6 +2,13 @@
 
 Monorepo with `frontend` (Vite + React), `backend` (FastAPI), and two Celery workers (`agent-worker`, `analysis-worker`), bootstrapped with the same CI/CD setup as [Muffin](https://github.com/mitchou10) (GitHub Actions, release-please, Docker/GHCR, Helm, Trivy/Gitleaks scans).
 
+## Documentation
+
+- [Routes of the API](docs/api.md) (generated from the OpenAPI document, also in Swagger at `/api/docs`)
+- [Ephemeral analysis](docs/ephemeral-analysis.md): upload spreadsheets, ask a question, nothing is kept
+- [MCP server](docs/mcp.md): the same analysis for agents (the guide to connect one is in the app, from the version in the sidebar, and at `GET /api/help/mcp`)
+- [Charts](docs/charts.md), [SQL queries](docs/sql-queries.md), [search index](docs/search-index.md), [`analyse.json`](docs/analyse-json.md)
+
 ## Authentication (BFF + Keycloak)
 
 The backend acts as a Backend-For-Frontend: the browser never sees an access/refresh token.

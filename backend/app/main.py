@@ -23,6 +23,7 @@ from app.routers.conversations import router as conversations_router
 from app.routers.ephemeral import internal_router as ephemeral_internal_router
 from app.routers.ephemeral import router as ephemeral_router
 from app.routers.health import router as health_router
+from app.routers.help import router as help_router
 from app.routers.models import router as models_router
 from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
@@ -87,7 +88,11 @@ app = FastAPI(
         {"name": "Auth", "description": "Login/logout via Keycloak, session management."},
         {"name": "Admin", "description": "Who has access to what (administrators only)."},
         {"name": "Collections", "description": "Collections, their files (upload) and sharing."},
-        {"name": "Conversations", "description": "Chat conversations and their messages (private to their creator)."},
+        {
+            "name": "Conversations",
+            "description": "Chat conversations and their messages (private to their creator): sending, running the "
+            "assistant again, thumbs up/down on an answer, charts.",
+        },
         {
             "name": "Ephemeral analysis",
             "description": "Upload spreadsheets, wait for their pre-analysis, ask a question: nothing is kept.",
@@ -95,7 +100,8 @@ app = FastAPI(
         {"name": "Models", "description": "LLMs available to the assistant."},
         {"name": "Runs", "description": "Asynchronous assistant runs started by a message."},
         {"name": "Files", "description": "Download, delete and analysis control of a single file."},
-        {"name": "Health", "description": "Liveness/readiness of the API and its dependencies."},
+        {"name": "Health", "description": "Liveness/readiness of the API and its dependencies, and its version."},
+        {"name": "Help", "description": "Guides in markdown (how to connect an agent over MCP)."},
     ],
 )
 
@@ -122,6 +128,7 @@ app.include_router(internal_router, prefix="/api")
 app.include_router(queries_internal_router, prefix="/api")
 app.include_router(charts_internal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+app.include_router(help_router, prefix="/api")
 if mcp_app is not None:
     # RFC 9728: a client that gets a 401 on /mcp is pointed to this document at the root of the host, from which it
     # finds Keycloak. (The SDK also serves it under /mcp, where the ingress would not look.)
