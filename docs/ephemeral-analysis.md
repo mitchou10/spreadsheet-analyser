@@ -42,6 +42,15 @@ fini). `answer` est le même texte que dans le chat (markdown) ; `trace` dit com
 que ce texte affiche pointent vers `/api/ephemeral/runs/<run>/charts/<graphique>`, la route de l'étape 5, et non vers
 celles du chat. Un graphique n'existe que tant que l'analyse n'a pas expiré : récupérez-le avant.
 
+## Modèle
+
+Le champ `model` de la question (`POST /api/ephemeral/analyses/<analyse>/runs`) est **facultatif**. Sans lui, le
+backend prend le premier modèle de conversation que le fournisseur propose (`OPENAI_BASE_URL`) : il n'y a pas de
+modèle par défaut écrit en dur. Si vous en donnez un, il doit figurer dans `GET /api/models` (sinon 422) ; il est
+utilisé pour cette question et devient celui des questions suivantes de l'analyse, tant que vous n'en donnez pas un
+autre. Si le fournisseur est injoignable et qu'aucun modèle n'est donné, la question échoue avec un message
+explicite. `LLM_ALLOWED_MODELS` restreint la liste des modèles proposés.
+
 ## États
 
 | `status` de l'analyse | Sens |

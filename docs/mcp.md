@@ -90,6 +90,13 @@ une question sur les mêmes fichiers dans une autre analyse, sans les renvoyer :
 Les erreurs que le modèle peut corriger (fichier d'un type non accepté, base64 invalide, modèle inconnu, analyse
 introuvable, run déjà en cours) sont renvoyées dans le résultat : `{"error": "…", "status_code": 422}`.
 
+## Modèle
+
+`model` est facultatif dans `analyze_files`, `ask_known_files` et `ask`. Omis, le serveur prend le premier modèle de
+conversation que le fournisseur propose (aucun modèle par défaut n'est écrit en dur) ; donné, il doit figurer dans
+`GET /api/models` (sinon l'outil répond une erreur 422) et reste celui des questions suivantes de l'analyse. Il n'y a
+pas d'outil MCP pour lister les modèles : sans connaître les identifiants, ne l'envoyez pas.
+
 ## Limites
 
 - Les fichiers voyagent en base64 dans l'appel : `MCP_MAX_UPLOAD_BYTES` (10 Mio) en tout une fois décodés. Au-delà,

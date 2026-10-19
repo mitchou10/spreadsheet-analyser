@@ -61,6 +61,13 @@ Chaque fichier d'une analyse a un `sha256`. Avec `ask_known_files`, on repose un
 renvoyer ; si l'un d'eux n'est plus connu (expiré, supprimé, jamais envoyé), rien n'est créé et l'erreur liste les
 fichiers à renvoyer avec `analyze_files`.
 
+## Modèle
+
+`model` est facultatif dans `analyze_files`, `ask_known_files` et `ask` : sans lui, le serveur utilise le premier
+modèle de conversation proposé par le fournisseur. Si vous en donnez un, il doit exister (liste dans
+`GET /api/models`), sinon l'outil répond une erreur ; il reste ensuite celui des questions suivantes de l'analyse.
+Si vous ne connaissez pas les identifiants, ne l'envoyez pas.
+
 ## Limites
 
 - Les fichiers voyagent en base64 dans l'appel : 10 Mio au total une fois décodés. Au-delà, utilisez la route
