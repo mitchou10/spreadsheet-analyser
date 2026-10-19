@@ -14,7 +14,7 @@ curl -X POST https://<hôte>/api/ephemeral/analyses \
   -H "Authorization: Bearer $TOKEN" \
   -F files=@ventes.xlsx -F files=@stock.csv -F ttl_hours=24
 # 202 {"id": "<analyse>", "status": "processing", "expires_at": "...",
-#      "files": [{"id", "name", "size_bytes", "status": "pending", "error": null}]}
+#      "files": [{"id", "name", "size_bytes", "sha256", "status": "pending", "error": null}]}
 
 # 2. Attendre la pré-analyse : status passe à "ready" (ou "partial" / "failed")
 curl https://<hôte>/api/ephemeral/analyses/<analyse> -H "Authorization: Bearer $TOKEN"

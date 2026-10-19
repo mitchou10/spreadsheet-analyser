@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -6,10 +7,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from mcp.server.auth.routes import create_protected_resource_routes
+from mcp.server.transport_security import TransportSecuritySettings
+from pydantic import AnyHttpUrl
 
-from app.config import EphemeralSettings, KeycloakSettings
+from app.config import EphemeralSettings, KeycloakSettings, McpSettings
 from app.db import async_session
 from app.dependencies import get_storage
+from app.mcp.server import KEYCLOAK_ISSUER, MCP_RESOURCE_URL, mcp_server
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.charts import internal_router as charts_internal_router
@@ -25,6 +30,20 @@ from app.routers.runs import router as runs_router
 from app.services import ConflictError, EphemeralService, ForbiddenError, InvalidRequestError, NotFoundError
 
 _keycloak_settings = KeycloakSettings()
+
+# MCP (Streamable HTTP) under /mcp, signed in with the same Keycloak tokens as the API (docs/mcp.md). Not behind
+# the cookie of the browser: only an Authorization header is read, so another site cannot make the browser call it.
+# streamable_http_path="/": the route is the root of this sub-app, mounted under /mcp (not /mcp/mcp).
+mcp_app = (
+    mcp_server.streamable_http_app(
+        streamable_http_path="/",
+        # The Host check of the SDK targets servers without authentication that listen on localhost; this one
+        # sits behind the ingress of the application and refuses calls without a valid Bearer token.
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
+    if McpSettings().MCP_ENABLED
+    else None
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +68,9 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         logger.exception("Could not ensure the S3 bucket exists")
     interval = EphemeralSettings().EPHEMERAL_PURGE_INTERVAL_SECONDS
     purger = asyncio.create_task(_purge_expired_forever(interval)) if interval > 0 else None
-    yield
+    # The mounted MCP app has its own lifespan (its session manager), which Starlette does not run for a mount.
+    async with mcp_app.router.lifespan_context(mcp_app) if mcp_app else contextlib.nullcontext():
+        yield
     if purger is not None:
         purger.cancel()
 
@@ -99,6 +120,15 @@ app.include_router(internal_router, prefix="/api")
 app.include_router(queries_internal_router, prefix="/api")
 app.include_router(charts_internal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
+if mcp_app is not None:
+    # RFC 9728: a client that gets a 401 on /mcp is pointed to this document at the root of the host, from which it
+    # finds Keycloak. (The SDK also serves it under /mcp, where the ingress would not look.)
+    app.router.routes.extend(
+        create_protected_resource_routes(
+            AnyHttpUrl(MCP_RESOURCE_URL), [AnyHttpUrl(KEYCLOAK_ISSUER)], resource_name="spreadsheet-analyser"
+        )
+    )
+    app.mount("/mcp", mcp_app)
 
 
 @app.exception_handler(NotFoundError)

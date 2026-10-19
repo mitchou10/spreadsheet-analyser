@@ -42,6 +42,17 @@ global:
             backend:
               serviceName: "spreadsheet-analyser-backend"
               portNumber: 80
+          # The MCP server, and the document that tells its clients where to sign in (RFC 9728, at the root of the host).
+          - path: "/mcp"
+            pathType: "Prefix"
+            backend:
+              serviceName: "spreadsheet-analyser-backend"
+              portNumber: 80
+          - path: "/.well-known/oauth-protected-resource"
+            pathType: "Prefix"
+            backend:
+              serviceName: "spreadsheet-analyser-backend"
+              portNumber: 80
           - path: "/"
             pathType: "Prefix"
             backend:

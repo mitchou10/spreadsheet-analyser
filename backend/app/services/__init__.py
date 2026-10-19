@@ -5,7 +5,7 @@ from app.services.chart import ChartService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
 from app.services.ephemeral import EphemeralService
-from app.services.errors import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError
+from app.services.errors import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError, UnknownFilesError
 from app.services.feedback import FeedbackService
 from app.services.file import FileService
 from app.services.run import RunService
@@ -28,5 +28,6 @@ __all__ = [
     "NotFoundError",
     "RunService",
     "SqlQueryService",
+    "UnknownFilesError",
     "StorageService",
 ]

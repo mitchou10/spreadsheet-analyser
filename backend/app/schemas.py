@@ -513,6 +513,8 @@ class EphemeralFileOut(BaseModel):
     id: uuid.UUID
     name: str
     size_bytes: int
+    # sha256 of the content (the MCP tool `ask_known_files` takes it to analyse the file again without sending it).
+    sha256: str
     # The pre-analysis of this file.
     status: AnalysisStatus
     error: str | None

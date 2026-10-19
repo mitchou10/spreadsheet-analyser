@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import EphemeralSettings
-from app.models import AnalysisStatus, Chart, ChartStatus, Collection, Message, Run
+from app.models import AnalysisStatus, Chart, ChartStatus, Collection, File, Message, Run
 from app.repositories import (
     ChartRepository,
     CollectionRepository,
@@ -15,12 +15,12 @@ from app.repositories import (
     MessageRepository,
     RunRepository,
 )
-from app.services.actor import Actor
+from app.services.actor import Actor, normalize_email
 from app.services.analysis import AnalysisService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
 from app.services.dispatcher import RunDispatcher
-from app.services.errors import ConflictError, InvalidRequestError, NotFoundError
+from app.services.errors import ConflictError, InvalidRequestError, NotFoundError, UnknownFilesError
 from app.services.file import FileService
 from app.services.run import RunService
 from app.services.storage import StorageService, collection_prefix, conversation_prefix, legacy_collection_prefix
@@ -38,6 +38,8 @@ class EphemeralFile:
     file_id: uuid.UUID
     name: str
     size_bytes: int
+    # sha256 of the content: what `create_from_hashes` takes to analyse these files again without sending them.
+    sha256: str
     status: AnalysisStatus
     error: str | None
 
@@ -89,22 +91,44 @@ class EphemeralService:
     ) -> EphemeralAnalysis:
         """Stores the files in a new ephemeral collection and queues their pre-analysis. Identical content that
         was already analysed is reused (see AnalysisService.create), so it is ready at once."""
-        ttl = self._ttl(ttl_hours)
         if not uploads:
             raise InvalidRequestError("At least one file is required")
-        if len(uploads) > self.settings.EPHEMERAL_MAX_FILES:
-            raise InvalidRequestError(f"At most {self.settings.EPHEMERAL_MAX_FILES} files per analysis")
-
-        collection = await self.collections.create(actor, EPHEMERAL_NAME)
-        collection.ttl_hours = ttl
-        collection.expires_at = datetime.now(UTC) + timedelta(hours=ttl)
-        await self.session.commit()
+        self._check_count(len(uploads))
+        collection = await self._new_collection(actor, ttl_hours)
         try:
             for name, content, content_type in uploads:
                 file = await self.files.upload(actor, collection.id, name, content, content_type)
                 await self.analyses.ensure_current(actor, file.id)
         except Exception:
             await self._purge(collection)  # nothing half-created is left behind
+            raise
+        return await self.get(actor, collection.id)
+
+    async def create_from_hashes(
+        self, actor: Actor, hashes: list[str], ttl_hours: int | None = None
+    ) -> EphemeralAnalysis:
+        """An ephemeral analysis of files already analysed, named by the sha256 of their content: nothing is
+        sent again, the files are copied and their results reused (so they are ready at once).
+
+        Only files the person can read (their own, the ones shared with them, their other ephemeral analyses) and
+        whose analysis is ready are known. If any hash is not, nothing is created and `UnknownFilesError` lists
+        them: knowing a hash is not enough to read someone else's file."""
+        wanted = list(dict.fromkeys(self._hash(h) for h in hashes))
+        if not wanted:
+            raise InvalidRequestError("At least one file hash is required")
+        self._check_count(len(wanted))
+        sources = await self._known(actor, wanted)
+        missing = [h for h in wanted if h not in sources]
+        if missing:
+            raise UnknownFilesError(missing)
+
+        collection = await self._new_collection(actor, ttl_hours)
+        try:
+            for file_hash in wanted:
+                file = await self.files.duplicate(actor, collection.id, sources[file_hash])
+                await self.analyses.ensure_current(actor, file.id)
+        except Exception:
+            await self._purge(collection)
             raise
         return await self.get(actor, collection.id)
 
@@ -117,6 +141,7 @@ class EphemeralService:
                 file_id=file.id,
                 name=file.name,
                 size_bytes=file.size_bytes,
+                sha256=file.file_hash,
                 status=(analysis := latest.get(file.id)) and analysis.status or AnalysisStatus.PENDING,
                 error=analysis.error if analysis else None,
             )
@@ -214,6 +239,43 @@ class EphemeralService:
             await self.session.execute(text("SELECT pg_advisory_unlock(:id)"), {"id": PURGE_LOCK_ID})
 
     # --- internals ---
+
+    def _check_count(self, count: int) -> None:
+        if count > self.settings.EPHEMERAL_MAX_FILES:
+            raise InvalidRequestError(f"At most {self.settings.EPHEMERAL_MAX_FILES} files per analysis")
+
+    @staticmethod
+    def _hash(value: str) -> str:
+        file_hash = (value or "").strip().lower()
+        if len(file_hash) != 64 or any(c not in "0123456789abcdef" for c in file_hash):
+            raise InvalidRequestError(f"{value!r} is not a sha256 (64 hexadecimal characters)")
+        return file_hash
+
+    async def _known(self, actor: Actor, hashes: list[str]) -> dict[str, File]:
+        """For each hash, a file the person can read whose current version has a ready analysis made with the
+        current analyzer version (the one a copy can reuse)."""
+        candidates = await self.files.files.list_readable_by_hashes(hashes, actor.user_id, normalize_email(actor.email))
+        latest = await self.analyses.latest_by_file([file.id for file in candidates])
+        version = self.analyses.settings.ANALYSIS_REUSE_VERSION
+        known: dict[str, File] = {}
+        for file in candidates:
+            analysis = latest.get(file.id)
+            if (
+                analysis is not None
+                and analysis.status == AnalysisStatus.READY
+                and analysis.file_version == file.version
+                and analysis.analyzer_version == version
+            ):
+                known.setdefault(file.file_hash, file)
+        return known
+
+    async def _new_collection(self, actor: Actor, ttl_hours: int | None) -> Collection:
+        ttl = self._ttl(ttl_hours)
+        collection = await self.collections.create(actor, EPHEMERAL_NAME)
+        collection.ttl_hours = ttl
+        collection.expires_at = datetime.now(UTC) + timedelta(hours=ttl)
+        await self.session.commit()
+        return collection
 
     def _ttl(self, ttl_hours: int | None) -> int:
         ttl = ttl_hours if ttl_hours is not None else self.settings.EPHEMERAL_DEFAULT_TTL_HOURS
