@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.9.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.8.0...v0.9.0) (2026-10-19)
+
+
+### Features
+
+* analyse éphémère de fichiers, routes /api/ephemeral ([f5bd0b3](https://github.com/mitchou10/spreadsheet-analyser/commit/f5bd0b3199f9e5f2918ea1b288248584ec0d4256))
+* **mcp:** add an mcp server for the ephemeral analysis ([adbb157](https://github.com/mitchou10/spreadsheet-analyser/commit/adbb157a1dcc098c5f02592dd28c0b3a1dde3069))
+* read the charts of an ephemeral run through the run ([d7f5550](https://github.com/mitchou10/spreadsheet-analyser/commit/d7f55504ee02d7a298d47379bda86aea969d82f1))
+* regenerate the last answer of the assistant ([c63143b](https://github.com/mitchou10/spreadsheet-analyser/commit/c63143bbead347395c8d5c3eea6915a9bc5f34b7))
+* retry the last message when its run failed or was cancelled ([e469139](https://github.com/mitchou10/spreadsheet-analyser/commit/e4691399814b36946a6ddab972de1505ba78ce34))
+* show the changelog and the mcp guide from the version ([a1ff823](https://github.com/mitchou10/spreadsheet-analyser/commit/a1ff823413484f184185e07f6fd81ddf078922fc))
+* show the version of the app in the sidebar ([20e8670](https://github.com/mitchou10/spreadsheet-analyser/commit/20e86708abd2a1f5cea736d337e74e75763d7aee))
+* thumbs up/down on the assistant's answers, with an optional reason and comment ([dad8f3f](https://github.com/mitchou10/spreadsheet-analyser/commit/dad8f3f664827e3f30d48bc73083dfb29ad2f0bb))
+
+
+### Bug Fixes
+
+* keep ephemeral analyses until the run is over and read ([513c99a](https://github.com/mitchou10/spreadsheet-analyser/commit/513c99a00eeb3b2f403a32d9ab4d41f78add9566))
+
+
+### Performance Improvements
+
+* **backend:** reuse the analysis of an identical file instead of analysing it again ([914ee02](https://github.com/mitchou10/spreadsheet-analyser/commit/914ee02e1ef0bdef6ae412d1ac42c759c4ce0092))
+
 ## [0.8.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.4...v0.8.0) (2026-10-19)
 
 
