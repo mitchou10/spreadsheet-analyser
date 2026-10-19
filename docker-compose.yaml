@@ -3,6 +3,8 @@ services:
     build:
       context: frontend
       target: runtime
+      args:
+        VITE_API_BASE_URL: http://localhost:8000
     ports:
       # Host 8081, not 8080: Keycloak already claims host 8080 below.
       - "8081:8080"

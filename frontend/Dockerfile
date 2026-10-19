@@ -6,9 +6,9 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --frozen-lockfile
 COPY . .
-# Vite inlines VITE_* at build time: override with the public backend URL for non-local deployments
-# (--build-arg VITE_API_BASE_URL=..., empty = same origin, ingress-routed).
-ARG VITE_API_BASE_URL=http://localhost:8000
+# Vite inlines VITE_* at build time. Empty = same origin: the ingress routes /api to the backend, which is what the
+# deployed image needs (the CI builds it without build args). docker-compose overrides it for the local stack.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN pnpm build
 
