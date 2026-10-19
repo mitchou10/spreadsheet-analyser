@@ -59,7 +59,8 @@ un pod ne reçoit que les `Secret` qu'il liste dans `envFrom`.
 | `<vaultEnv>/spreadsheet-analyser/openai` | `OPENAI_API_KEY` (optionnelles : `OPENAI_BASE_URL`, `LLM_ALLOWED_MODELS`) | `spreadsheet-analyser-openai` | backend, agent_worker |
 | `<vaultEnv>/spreadsheet-analyser/internal` | `INTERNAL_API_TOKEN` | `spreadsheet-analyser-internal` | backend, agent_worker, analysis_worker, index_worker, query_worker |
 | `<vaultEnv>/spreadsheet-analyser/redis` | `REDIS_PASSWORD` | `spreadsheet-analyser-redis` (ajoute `REDIS_URL`) | backend, agent_worker, analysis_worker, index_worker, query_worker |
-| `<vaultEnv>/spreadsheet-analyser/db` | `username`, `password` (`username` = `spreadsheet_analyser`, le propriétaire créé par CloudNativePG) | `spreadsheet-analyser-db` (ne garde que `DATABASE_URL`) et `spreadsheet-analyser-db-appuser` (type `basic-auth`, lu par CloudNativePG) | backend, jobs.migration ; CloudNativePG |
+| `<vaultEnv>/spreadsheet-analyser/db-superuser` | `username` (`postgres`), `password` | `spreadsheet-analyser-db-superuser` (type `basic-auth`) | CloudNativePG |
+| `<vaultEnv>/spreadsheet-analyser/db-appuser` | `username` (`spreadsheet_analyser`, le propriétaire créé par CloudNativePG), `password` | `spreadsheet-analyser-db-appuser` (type `basic-auth`, lu par CloudNativePG) et `spreadsheet-analyser-db-infos` (ne garde que `DATABASE_URL`) | CloudNativePG ; backend, jobs.migration |
 
 Les clés « optionnelles » ne sont pas secrètes : le chart les définit déjà dans `env:` (section suivante). Les écrire dans Vault est possible, mais elles seraient alors ignorées tant qu'elles restent aussi dans `env:`, qui est prioritaire sur `envFrom` : retirez-les d'`env:` pour que Vault fasse foi.
 
@@ -80,6 +81,20 @@ openssl rand -hex 32 | vault kv put -mount=<vaultMount> <vaultEnv>/spreadsheet-a
   *Credentials*) puis copiez-le dans Vault. Ne gardez pas le secret du realm de dev.
 - `REDIS_PASSWORD`, `username` / `password` de la base, `AWS_*` : viennent du service concerné (Redis,
   PostgreSQL, RustFS ou S3).
+- `username` / `password` de la base : avec CloudNativePG, c'est vous qui les choisissez, **avant le premier
+  démarrage du cluster**. Comme pour Muffin, le chemin `db-appuser` alimente deux `Secret` :
+  `spreadsheet-analyser-db-appuser` (CloudNativePG s'en sert pour `initdb`) et `spreadsheet-analyser-db-infos`
+  (`DATABASE_URL` du backend et de la migration). Le superuser a son propre chemin, `db-superuser`. `username` doit valoir `spreadsheet_analyser` (le `owner` d'`initdb`), et le mot de passe doit être
+  alphanumérique :
+
+  ```bash
+  vault kv put -mount=<vaultMount> <vaultEnv>/spreadsheet-analyser/db-appuser \
+    username=spreadsheet_analyser \
+    password="$(openssl rand -hex 24)"
+  vault kv put -mount=<vaultMount> <vaultEnv>/spreadsheet-analyser/db-superuser \
+    username=postgres \
+    password="$(openssl rand -hex 24)"
+  ```
 - `OPENAI_API_KEY` : créée chez votre fournisseur, de préférence une clé dédiée à l'application avec un plafond de
   dépense.
 
@@ -119,7 +134,7 @@ Chaque secret ci-dessus a besoin de sa configuration, qui n'est **pas** dans Vau
 Deux `Secret` sont **calculés** par une `transformation` VSO, pour ne stocker le mot de passe qu'une fois :
 
 - `…-redis` : `REDIS_URL = redis://:<REDIS_PASSWORD>@<hôte>:6379/0` (le mot de passe brut est conservé).
-- `…-db` : `DATABASE_URL = postgresql+asyncpg://<username>:<password>@<hôte>:5432/<base>`, avec
+- `…-db-infos` : `DATABASE_URL = postgresql+asyncpg://<username>:<password>@<hôte>:5432/<base>`, avec
   `excludes: [".*"]` pour que les pods ne reçoivent pas `username` et `password` séparément.
 
 Les modèles VSO ne savent pas encoder les caractères réservés d'une URL : utilisez des mots de passe
@@ -138,11 +153,26 @@ helm upgrade --install spreadsheet-analyser ./helm \
 
 # 3. Vérifier que l'opérateur a bien créé les Secret et que leurs clés sont là
 kubectl get vaultstaticsecret
-kubectl get secret spreadsheet-analyser-db -o jsonpath='{.data}' | jq 'keys'   # ["DATABASE_URL"] seulement
+kubectl get secret spreadsheet-analyser-db-infos -o jsonpath='{.data}' | jq 'keys'   # ["DATABASE_URL"] seulement
 ```
 
 Un `Secret` absent fait rester le pod en `CreateContainerConfigError` : c'est le signe qu'un `VaultStaticSecret` n'a pas
 été synchronisé (chemin ou rôle Vault incorrect).
+
+### Dépannage
+
+| Symptôme | Cause probable |
+|---|---|
+| Le backend logue `database is unhealthy: {'error': '[Errno 111] Connection refused'}` | Le chemin Vault `<vaultEnv>/spreadsheet-analyser/db-appuser` (ou `db-superuser`) est vide ou n'est pas dans le bon `mount`. Sans `…-db-appuser`, CloudNativePG ne lance pas `initdb` : le pod PostgreSQL ne démarre pas et le service `spreadsheet-analyser-pg-cluster-rw` n'a aucun endpoint. Sans `…-db-infos`, le backend n'a pas de `DATABASE_URL` et retombe sur `localhost:5432`. |
+| Pod en `CreateContainerConfigError` | Un `Secret` listé dans `envFrom` n'existe pas : voir `kubectl get vaultstaticsecret` et les événements de la ressource. |
+
+Pour trancher entre les deux causes du premier cas :
+
+```bash
+kubectl get secret spreadsheet-analyser-db-infos spreadsheet-analyser-db-appuser spreadsheet-analyser-db-superuser   # les trois doivent exister
+kubectl get cluster,pods | grep pg                                           # le cluster doit être sain
+kubectl get endpoints spreadsheet-analyser-pg-cluster-rw                     # une IP, pas <none>
+```
 
 Hors Vault (poste de dev, test), vous pouvez créer les mêmes `Secret` à la main avec les mêmes noms et les mêmes
 clés, `envFrom` les lira de la même façon. Utilisez `kubectl create secret generic … --from-env-file=` depuis un fichier
