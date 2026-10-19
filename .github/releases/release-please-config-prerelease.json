@@ -3,6 +3,7 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "changelog-path": "frontend/CHANGELOG.md",
       "include-component-in-tag": false,
       "versioning": "prerelease",
       "prerelease": true,
