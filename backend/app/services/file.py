@@ -74,6 +74,34 @@ class FileService:
             raise
         return file
 
+    async def duplicate(self, actor: Actor, collection_id: uuid.UUID, source: File) -> File:
+        """A copy of a file the caller can read, in a collection they own (server-side copy of the object, the
+        bytes do not go through the backend)."""
+        await self.collections.get_owned(actor, collection_id)
+        file_id = uuid.uuid4()
+        key = file_key(collection_id, file_id, 1, source.name)
+        await self.storage.copy_object(source.s3_key, key)
+        try:
+            file = await self.files.add(
+                File(
+                    id=file_id,
+                    collection_id=collection_id,
+                    name=source.name,
+                    content_type=source.content_type,
+                    size_bytes=source.size_bytes,
+                    file_hash=source.file_hash,
+                    version=1,
+                    s3_key=key,
+                    uploaded_by=actor.user_id,
+                )
+            )
+            await self.session.commit()
+        except Exception:
+            await self.session.rollback()
+            await self.storage.delete_object(key)
+            raise
+        return file
+
     async def list_in_collection(self, actor: Actor, collection_id: uuid.UUID) -> list[File]:
         await self.collections.get(actor, collection_id)
         return await self.files.list_by_collection(collection_id)
