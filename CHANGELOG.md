@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.0...v0.7.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* **helm:** split the database secrets like Muffin (db-superuser, db-appuser, db-infos) ([a61ae61](https://github.com/mitchou10/spreadsheet-analyser/commit/a61ae61c779713233b4faa240afe3a917b1847de))
+
 ## [0.7.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.6.4...v0.7.0) (2026-10-18)
 
 
