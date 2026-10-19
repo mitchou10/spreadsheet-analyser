@@ -113,6 +113,16 @@ export const getActiveRun = async (conversationId: string): Promise<Run | null> 
   return run ? toRun(run) : null
 }
 
+/** Runs the assistant again on the last message, when it got no answer (no new message is stored). */
+export async function retryRun(conversationId: string, model?: string): Promise<Run> {
+  return toRun(
+    await apiFetch<RunDto>(`/conversations/${conversationId}/runs/retry`, {
+      method: 'POST',
+      body: jsonBody({ model: model ?? null }),
+    }),
+  )
+}
+
 export const getRun = async (runId: string) => toRun(await apiFetch<RunDto>(`/runs/${runId}`))
 
 export const cancelRun = async (runId: string) => toRun(await apiFetch<RunDto>(`/runs/${runId}/cancel`, { method: 'POST' }))

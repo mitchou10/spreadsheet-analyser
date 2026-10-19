@@ -21,6 +21,7 @@ interface ChatViewProps {
   collections: CollectionSummary[]
   onSend: (content: string, scope: MessageScope) => void
   onCancel: () => void
+  onRetry: () => void
   onCollectionsChanged: () => void
 }
 
@@ -40,6 +41,7 @@ export function ChatView({
   collections,
   onSend,
   onCancel,
+  onRetry,
   onCollectionsChanged,
 }: ChatViewProps) {
   return (
@@ -56,6 +58,7 @@ export function ChatView({
         hasOlder={hasOlder}
         isLoadingOlder={isLoadingOlder}
         onLoadOlder={onLoadOlder}
+        onRetry={onRetry}
       />
 
       <ChatInput

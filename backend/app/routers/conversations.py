@@ -15,6 +15,7 @@ from app.schemas import (
     MessageSourceCollection,
     MessageSourceFile,
     RunOut,
+    RunRetryIn,
     SendMessageOut,
 )
 from app.services.models import ModelNotAvailableError, ModelProviderError
@@ -122,6 +123,26 @@ async def send_message(
         default_model=await catalog.resolve_default(),
     )
     return SendMessageOut(message=_message_out(message), run=RunOut.model_validate(run))
+
+
+@router.post(
+    "/{conversation_id}/runs/retry",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Run the assistant again on the last message, when it got no answer (failed or cancelled run)",
+)
+async def retry_run(
+    conversation_id: uuid.UUID,
+    actor: ActorDep,
+    service: RunServiceDep,
+    catalog: ModelCatalogDep,
+    body: RunRetryIn | None = None,
+) -> RunOut:
+    """Same scope as the message, no new message. `model` switches the conversation's model first.
+    409 while a run is in progress, or when the last message already has an answer."""
+    model = body.model if body else None
+    await _check_model(catalog, model)
+    run = await service.retry(actor, conversation_id, model=model, default_model=await catalog.resolve_default())
+    return RunOut.model_validate(run)
 
 
 @router.get("/{conversation_id}/active-run", summary="The run currently in progress, if any (null otherwise)")

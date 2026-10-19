@@ -93,6 +93,11 @@ class MessageCreate(BaseModel):
     model: str | None = None
 
 
+class RunRetryIn(BaseModel):
+    # Switches the conversation's model before running again; omitted = keep the conversation's model.
+    model: str | None = None
+
+
 class TraceStep(BaseModel):
     """One tool call of the agent: what it asked and what it got back (the output is cut by the worker)."""
 

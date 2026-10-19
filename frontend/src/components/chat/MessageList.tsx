@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { Message } from '@/types/conversation'
-import { ArrowDown, Loader2 } from 'lucide-react'
+import { ArrowDown, Loader2, RotateCcw } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 
 // Closer than this to the bottom counts as "at the bottom": new messages keep it pinned there.
@@ -16,6 +16,7 @@ interface MessageListProps {
   hasOlder: boolean
   isLoadingOlder: boolean
   onLoadOlder: () => void
+  onRetry: () => void
 }
 
 export function MessageList({
@@ -25,6 +26,7 @@ export function MessageList({
   hasOlder,
   isLoadingOlder,
   onLoadOlder,
+  onRetry,
 }: MessageListProps) {
   const scroller = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
@@ -44,6 +46,8 @@ export function MessageList({
   const first = messages[0]?.id ?? null
   const last = messages[messages.length - 1]?.id ?? null
   const lastIsMine = messages[messages.length - 1]?.role === 'user'
+  // The last message got no answer and nothing is running: its run failed or was cancelled.
+  const canRetry = lastIsMine && !isAnswering
 
   useLayoutEffect(() => {
     const element = scroller.current
@@ -95,6 +99,15 @@ export function MessageList({
             <MessageBubble key={message.id} message={message} />
           ))}
           {isAnswering && <p className="animate-pulse text-sm text-muted-foreground">L'assistant réfléchit…</p>}
+          {canRetry && (
+            <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+              <span>L'assistant n'a pas répondu.</span>
+              <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+                <RotateCcw className="size-3.5" aria-hidden />
+                Réessayer
+              </Button>
+            </div>
+          )}
         </div>
       </div>
       {!atBottom && (
