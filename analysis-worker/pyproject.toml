@@ -1,6 +1,6 @@
 [project]
 name = "analysis-worker"
-version = "0.7.1"
+version = "0.7.2"
 description = "spreadsheet-analyser analysis worker: streaming statistical profile of csv, xlsx, xls and ods files"
 requires-python = ">=3.12"
 dependencies = [
