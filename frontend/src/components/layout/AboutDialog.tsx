@@ -3,7 +3,6 @@ import { Markdown } from '@/components/chat/Markdown'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { API_BASE_URL } from '@/lib/api'
-import mcpGuide from '@/content/mcp.md?raw'
 
 type Tab = 'changelog' | 'mcp'
 
@@ -11,9 +10,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'changelog', label: 'Nouveautés' },
   { id: 'mcp', label: 'Connecter un agent (MCP)' },
 ]
-
-/** The address of the MCP server: next to the API (the page's own host when the API is on the same origin). */
-const mcpUrl = () => `${API_BASE_URL || window.location.origin}/mcp`
 
 interface AboutDialogProps {
   open: boolean
@@ -27,6 +23,8 @@ export function AboutDialog({ open, onOpenChange, frontendVersion, backendVersio
   const [tab, setTab] = useState<Tab>('changelog')
   const [changelog, setChangelog] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  const [mcpGuide, setMcpGuide] = useState<string | null>(null)
+  const [mcpFailed, setMcpFailed] = useState(false)
 
   // The changelog is a separate chunk, fetched the first time the dialog is opened.
   useEffect(() => {
@@ -36,6 +34,15 @@ export function AboutDialog({ open, onOpenChange, frontendVersion, backendVersio
       () => setFailed(true),
     )
   }, [open, changelog])
+
+  // The guide is a markdown file of the backend (with the real address of the server), read when its tab is opened.
+  useEffect(() => {
+    if (!open || tab !== 'mcp' || mcpGuide !== null) return
+    fetch(`${API_BASE_URL}/api/help/mcp`, { credentials: 'include' }).then(
+      async (response) => (response.ok ? setMcpGuide(await response.text()) : setMcpFailed(true)),
+      () => setMcpFailed(true),
+    )
+  }, [open, tab, mcpGuide])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,7 +80,14 @@ export function AboutDialog({ open, onOpenChange, frontendVersion, backendVersio
             ) : (
               <p className="text-muted-foreground">Chargement…</p>
             ))}
-          {tab === 'mcp' && <Markdown>{mcpGuide.replaceAll('{{MCP_URL}}', mcpUrl())}</Markdown>}
+          {tab === 'mcp' &&
+            (mcpGuide !== null ? (
+              <Markdown>{mcpGuide}</Markdown>
+            ) : mcpFailed ? (
+              <p className="text-destructive">Le guide n'a pas pu être chargé.</p>
+            ) : (
+              <p className="text-muted-foreground">Chargement…</p>
+            ))}
         </div>
       </DialogContent>
     </Dialog>

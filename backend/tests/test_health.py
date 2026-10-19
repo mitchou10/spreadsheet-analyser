@@ -40,3 +40,16 @@ async def test_version_is_the_one_of_the_package() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"version": version("backend")}
+
+
+async def test_the_mcp_guide_is_served_as_markdown_with_the_real_address() -> None:
+    from app.mcp.server import MCP_RESOURCE_URL
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/help/mcp")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert MCP_RESOURCE_URL in response.text and "{{MCP_URL}}" not in response.text
+    assert "analyze_files" in response.text and "ask_known_files" in response.text
