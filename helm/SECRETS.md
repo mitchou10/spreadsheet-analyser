@@ -229,5 +229,6 @@ créés par VSO existent déjà). Chaque worker a sa propre image (`agent-worker
   `postgres` et `rustfs` existent mais sont désactivés). L'opérateur CloudNativePG doit être installé dans le cluster ;
 - le `mount`, les `path` et le `vaultAuthRef` des `VaultStaticSecret`, ainsi que les hôtes de `DATABASE_URL` et
   `REDIS_URL` ;
-- le frontend est compilé avec `VITE_API_BASE_URL=http://localhost:8000` par défaut : la CD doit passer cette
-  variable (vide pour une même origine) dans les `BUILD_ARGS`, sans quoi le navigateur appelle `localhost`.
+- le frontend est compilé avec `VITE_API_BASE_URL` vide par défaut (même origine : l'ingress envoie `/api` au
+  backend). Seul `docker-compose.yaml` la fixe à `http://localhost:8000`. Si vous servez le backend sur un autre
+  domaine, passez cette variable dans les `BUILD_ARGS` de la CD, sans quoi le navigateur appelle la mauvaise URL.
