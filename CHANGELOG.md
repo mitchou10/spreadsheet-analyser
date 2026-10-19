@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.1...v0.7.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* **helm:** set the resources of the migration job for the namespace quota ([bbf5283](https://github.com/mitchou10/spreadsheet-analyser/commit/bbf5283a515263092954b3dad2ce8b8fdf2bef23))
+
 ## [0.7.1](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.0...v0.7.1) (2026-10-19)
 
 
