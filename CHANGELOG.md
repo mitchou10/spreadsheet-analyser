@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.3...v0.7.4) (2026-10-19)
+
+
+### Bug Fixes
+
+* **frontend:** fall back to the same origin when VITE_API_BASE_URL is unset ([586ab87](https://github.com/mitchou10/spreadsheet-analyser/commit/586ab87f17fa13a99f64f6d3411de66f7e71e403))
+
 ## [0.7.3](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.7.2...v0.7.3) (2026-10-19)
 
 
