@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,10 @@ class Conversation(Base):
     model: Mapped[str | None] = mapped_column(String(255), default=None)
     # Keycloak user_id (sub claim) of the owner - no local users table, see app/core/security.
     user_id: Mapped[str] = mapped_column(String(255), index=True)
+    # The conversation of an ephemeral analysis: not listed, and deleted with that collection.
+    ephemeral_collection_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("collections.id", ondelete="CASCADE"), default=None, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

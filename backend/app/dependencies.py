@@ -15,6 +15,7 @@ from app.services import (
     ChartService,
     CollectionService,
     ConversationService,
+    EphemeralService,
     FeedbackService,
     FileService,
     RunService,
@@ -118,6 +119,15 @@ def get_admin(user: Annotated[RequestContext, Depends(get_current_user)]) -> Act
 
 
 AdminDep = Annotated[Actor, Depends(get_admin)]
+
+
+def get_ephemeral_service(
+    session: SessionDep, storage: StorageDep, dispatcher: Annotated[RunDispatcher, Depends(get_dispatcher)]
+) -> EphemeralService:
+    return EphemeralService(session, storage, dispatcher)
+
+
+EphemeralServiceDep = Annotated[EphemeralService, Depends(get_ephemeral_service)]
 
 
 def get_feedback_service(session: SessionDep) -> FeedbackService:
