@@ -1,6 +1,8 @@
 // The browser talks to the backend directly (not through the Vite/nginx origin): the BFF session cookie
 // is scoped to the backend origin, and its CORS config explicitly allows the frontend one.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+// Empty (the default) means same origin: the ingress routes /api to the backend. For a split-host setup
+// (docker-compose), VITE_API_BASE_URL points to it, e.g. http://localhost:8000.
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export class ApiError extends Error {
   status: number
