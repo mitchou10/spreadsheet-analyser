@@ -1,10 +1,18 @@
 import uuid
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import AdminDep, AdminServiceDep, AnalysisServiceDep, get_admin
-from app.schemas import AccessCreate, AccessOut, AdminCollectionOut, AdminPersonOut, UserIndexRebuildIn
+from app.dependencies import AdminDep, AdminServiceDep, AnalysisServiceDep, FeedbackServiceDep, get_admin
+from app.models import FeedbackRating
+from app.schemas import (
+    AccessCreate,
+    AccessOut,
+    AdminCollectionOut,
+    AdminPersonOut,
+    FeedbackReviewOut,
+    UserIndexRebuildIn,
+)
 
 # Every route here requires the administrator role, whatever the route's own parameters.
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(get_admin)])
@@ -18,6 +26,16 @@ async def collections_access(service: AdminServiceDep) -> list[AdminCollectionOu
 @router.get("/people", summary="Every person (by email) with the collections they own or can read")
 async def people_access(service: AdminServiceDep) -> list[AdminPersonOut]:
     return [AdminPersonOut(**asdict(person)) for person in await service.people_access()]
+
+
+@router.get("/feedback", summary="Thumbs up/down given to the answers, latest first, with the exchange they are about")
+async def list_feedback(
+    service: FeedbackServiceDep,
+    rating: FeedbackRating | None = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[FeedbackReviewOut]:
+    return [FeedbackReviewOut(**asdict(item)) for item in await service.review(rating, limit, offset)]
 
 
 @router.post(

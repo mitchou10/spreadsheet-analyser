@@ -30,6 +30,19 @@ class MessageRepository(BaseRepository[Message]):
             .limit(1)
         )
 
+    async def previous_user(self, conversation_id: uuid.UUID, message: Message) -> Message | None:
+        """The user message that comes just before `message` (the question an answer replies to)."""
+        return await self._first(
+            self._select()
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.role == MessageRole.USER,
+                tuple_(Message.created_at, Message.id) < (message.created_at, message.id),
+            )
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+        )
+
     async def page_by_conversation(
         self, conversation_id: uuid.UUID, limit: int, before: Message | None = None
     ) -> tuple[list[Message], bool]:

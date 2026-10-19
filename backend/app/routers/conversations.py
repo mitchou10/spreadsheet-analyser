@@ -3,12 +3,21 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.dependencies import ActorDep, ChartServiceDep, ConversationServiceDep, ModelCatalogDep, RunServiceDep
-from app.models import Message
+from app.dependencies import (
+    ActorDep,
+    ChartServiceDep,
+    ConversationServiceDep,
+    FeedbackServiceDep,
+    ModelCatalogDep,
+    RunServiceDep,
+)
+from app.models import Message, MessageFeedback
 from app.schemas import (
     ConversationCreate,
     ConversationOut,
     ConversationUpdate,
+    FeedbackIn,
+    FeedbackOut,
     MessageCreate,
     MessageOut,
     MessagePage,
@@ -23,7 +32,7 @@ from app.services.models import ModelNotAvailableError, ModelProviderError
 router = APIRouter(prefix="/conversations", tags=["Conversations"])
 
 
-def _message_out(message: Message) -> MessageOut:
+def _message_out(message: Message, feedback: MessageFeedback | None = None) -> MessageOut:
     return MessageOut(
         id=message.id,
         conversation_id=message.conversation_id,
@@ -39,6 +48,7 @@ def _message_out(message: Message) -> MessageOut:
             for f in message.files
         ],
         trace=message.trace,
+        feedback=FeedbackOut.model_validate(feedback) if feedback else None,
         created_at=message.created_at,
     )
 
@@ -90,12 +100,41 @@ async def list_messages(
     conversation_id: uuid.UUID,
     actor: ActorDep,
     service: ConversationServiceDep,
+    feedback_service: FeedbackServiceDep,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
     before: Annotated[uuid.UUID | None, Query(description="Id of the oldest message already loaded")] = None,
 ) -> MessagePage:
     """Without `before`: the latest `limit` messages. With it: the `limit` messages just before that one."""
     messages, has_more = await service.page_messages(actor, conversation_id, limit, before)
-    return MessagePage(items=[_message_out(m) for m in messages], has_more=has_more)
+    feedback = await feedback_service.for_messages(actor, messages)
+    return MessagePage(items=[_message_out(m, feedback.get(m.id)) for m in messages], has_more=has_more)
+
+
+@router.put(
+    "/{conversation_id}/messages/{message_id}/feedback",
+    summary="Thumbs up or down on an answer of the assistant (replaces the previous one)",
+)
+async def put_feedback(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    body: FeedbackIn,
+    actor: ActorDep,
+    service: FeedbackServiceDep,
+) -> FeedbackOut:
+    """Only the owner of the conversation, and only on an assistant message (422 otherwise)."""
+    feedback = await service.set(actor, conversation_id, message_id, body.rating, body.reason, body.comment)
+    return FeedbackOut.model_validate(feedback)
+
+
+@router.delete(
+    "/{conversation_id}/messages/{message_id}/feedback",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove my thumbs up/down on an answer",
+)
+async def delete_feedback(
+    conversation_id: uuid.UUID, message_id: uuid.UUID, actor: ActorDep, service: FeedbackServiceDep
+) -> None:
+    await service.clear(actor, conversation_id, message_id)
 
 
 @router.post(

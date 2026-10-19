@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from app.db import get_session
 from app.dependencies import get_actor, get_dispatcher, get_model_catalog, get_storage
 from app.main import app
-from app.services import Actor
+from app.services import Actor, RunService
 from tests.actors import BOB
 
 
@@ -886,3 +886,49 @@ async def test_a_failed_chart_is_polled_with_its_error_and_the_columns(client, s
         columns,
     )
     assert (await client.get(chart["url"])).status_code == 404  # nothing was drawn
+
+
+async def _answered(client, session, dispatcher) -> tuple[str, str]:
+    """A conversation with one answer of the assistant: (conversation id, answer message id)."""
+    conversation = (await client.post("/api/conversations", json={})).json()
+    sent = (await _send(client, conversation["id"], "Résume")).json()
+    runs = RunService(session, dispatcher)
+    await runs.start(uuid.UUID(sent["run"]["id"]))
+    done = await runs.complete(uuid.UUID(sent["run"]["id"]), "Voici.")
+    return conversation["id"], str(done.result_message_id)
+
+
+async def test_feedback_on_an_answer(client, session, dispatcher) -> None:
+    conversation_id, answer_id = await _answered(client, session, dispatcher)
+    url = f"/api/conversations/{conversation_id}/messages/{answer_id}/feedback"
+
+    voted = await client.put(url, json={"rating": "down", "reason": "wrong_result", "comment": "faux"})
+    assert voted.status_code == 200
+    assert voted.json() == {"rating": "down", "reason": "wrong_result", "comment": "faux"}
+    items = (await client.get(f"/api/conversations/{conversation_id}/messages")).json()["items"]
+    assert [i["feedback"] for i in items] == [None, {"rating": "down", "reason": "wrong_result", "comment": "faux"}]
+
+    changed = await client.put(url, json={"rating": "up"})
+    assert changed.json() == {"rating": "up", "reason": None, "comment": None}
+
+    assert (await client.delete(url)).status_code == 204
+    items = (await client.get(f"/api/conversations/{conversation_id}/messages")).json()["items"]
+    assert [i["feedback"] for i in items] == [None, None]
+
+
+async def test_feedback_validation_and_privacy(client, session, dispatcher) -> None:
+    conversation_id, answer_id = await _answered(client, session, dispatcher)
+    question_id = (await client.get(f"/api/conversations/{conversation_id}/messages")).json()["items"][0]["id"]
+    base = f"/api/conversations/{conversation_id}/messages"
+
+    assert (await client.put(f"{base}/{question_id}/feedback", json={"rating": "up"})).status_code == 422
+    assert (await client.put(f"{base}/{answer_id}/feedback", json={"rating": "meh"})).status_code == 422
+    assert (
+        await client.put(f"{base}/{answer_id}/feedback", json={"rating": "up", "comment": "x" * 2001})
+    ).status_code == 422
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert (await client.put(f"{base}/{unknown}/feedback", json={"rating": "up"})).status_code == 404
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await client.put(f"{base}/{answer_id}/feedback", json={"rating": "up"})).status_code == 404
+    assert (await client.delete(f"{base}/{answer_id}/feedback")).status_code == 404

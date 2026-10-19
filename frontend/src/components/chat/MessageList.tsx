@@ -100,6 +100,7 @@ export function MessageList({
           {messages.map((message) => (
             <MessageBubble
               key={message.id}
+              conversationId={conversationId}
               message={message}
               onRegenerate={message.id === lastAnswerId ? onRetry : undefined}
             />

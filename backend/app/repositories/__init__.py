@@ -3,6 +3,7 @@ from app.repositories.analysis import AnalysisRepository
 from app.repositories.chart import ChartRepository
 from app.repositories.collection import CollectionRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.file import FileRepository
 from app.repositories.message import MessageRepository
 from app.repositories.run import RunRepository
@@ -14,6 +15,7 @@ __all__ = [
     "ChartRepository",
     "CollectionRepository",
     "ConversationRepository",
+    "FeedbackRepository",
     "FileRepository",
     "MessageRepository",
     "RunRepository",
