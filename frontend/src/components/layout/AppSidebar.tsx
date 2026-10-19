@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useCurrentUser } from '@/auth/AuthContext'
 import { useAppVersion } from '@/hooks/useAppVersion'
+import { AboutDialog } from './AboutDialog'
 import type { Conversation } from '@/types/conversation'
 import { FileSpreadsheet, LogOut, Shield, SquarePen, Trash2 } from 'lucide-react'
 
@@ -54,6 +55,7 @@ export function AppSidebar({
 }: AppSidebarProps) {
   const { user, logout } = useCurrentUser()
   const version = useAppVersion()
+  const [aboutOpen, setAboutOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
 
   return (
@@ -128,15 +130,24 @@ export function AppSidebar({
             </SidebarMenuItem>
           </SidebarMenu>
         )}
-        <p
-          className="px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden"
-          title={`Interface ${version.frontend}${version.backend ? ` · Serveur ${version.backend}` : ''}`}
+        <button
+          type="button"
+          className="rounded-md px-2 py-1 text-left text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:hidden"
+          title={`Interface ${version.frontend}${version.backend ? ` · Serveur ${version.backend}` : ''} - nouveautés et aide`}
+          onClick={() => setAboutOpen(true)}
         >
           {version.backend && version.backend !== version.frontend
             ? `interface v${version.frontend} · serveur v${version.backend}`
             : `v${version.frontend}`}
-        </p>
+        </button>
       </SidebarFooter>
+
+      <AboutDialog
+        open={aboutOpen}
+        onOpenChange={setAboutOpen}
+        frontendVersion={version.frontend}
+        backendVersion={version.backend}
+      />
 
       <AlertDialog
         open={conversationToDelete !== null}

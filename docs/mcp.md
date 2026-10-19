@@ -8,6 +8,10 @@ au-delà de `ttl_hours`.
 Le serveur tourne dans le backend, en Streamable HTTP sous **`/mcp`** (par exemple
 `https://<hôte>/mcp`). `MCP_ENABLED=false` le désactive.
 
+Cette page est aussi dans l'application : cliquer sur la version, en bas à gauche de la barre latérale, ouvre une fenêtre
+avec les nouveautés (le journal des modifications) et la section « Connecter un agent (MCP) », dont les commandes
+contiennent déjà l'adresse du serveur (`frontend/src/content/mcp.md`).
+
 ## Authentification
 
 Comme le reste de l'API : un **jeton d'accès Keycloak** en `Authorization: Bearer <jeton>`, vérifié auprès de
