@@ -30,12 +30,17 @@ curl https://<hôte>/api/ephemeral/runs/<run> -H "Authorization: Bearer $TOKEN"
 # {"id", "analysis_id", "status": "completed", "answer": "…", "trace": {…}, "model", "created_at",
 #  "finished_at", "error": null}
 
-# 5. Facultatif : tout supprimer tout de suite
+# 5. Si la réponse a des graphiques : `charts` les liste, et `url` donne l'image (PNG, même authentification)
+curl https://<hôte>/api/ephemeral/runs/<run>/charts/<graphique> -H "Authorization: Bearer $TOKEN" -o graphique.png
+
+# 6. Facultatif : tout supprimer tout de suite
 curl -X DELETE https://<hôte>/api/ephemeral/analyses/<analyse> -H "Authorization: Bearer $TOKEN"
 ```
 
 On peut poser plusieurs questions sur les mêmes fichiers (un run à la fois : 409 tant que le précédent n'est pas
-fini). `answer` est le même texte que dans le chat (markdown) ; `trace` dit comment il a été produit.
+fini). `answer` est le même texte que dans le chat (markdown) ; `trace` dit comment il a été produit. Les images de graphiques
+que ce texte affiche pointent vers `/api/ephemeral/runs/<run>/charts/<graphique>`, la route de l'étape 5, et non vers
+celles du chat. Un graphique n'existe que tant que l'analyse n'a pas expiré : récupérez-le avant.
 
 ## États
 

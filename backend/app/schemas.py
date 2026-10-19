@@ -527,6 +527,17 @@ class EphemeralAnalysisOut(BaseModel):
     files: list[EphemeralFileOut]
 
 
+class EphemeralChartOut(BaseModel):
+    id: uuid.UUID
+    title: str
+    status: ChartStatus
+    error: str | None
+    width: int | None
+    height: int | None
+    # The PNG, with the same authentication as the other routes (only once the status is `completed`).
+    url: str
+
+
 class EphemeralRunCreate(BaseModel):
     query: str = Field(min_length=1, max_length=20000)
     # An id from GET /models; omitted = the default model.
@@ -543,9 +554,11 @@ class EphemeralRunOut(BaseModel):
     model: str | None
     created_at: datetime
     finished_at: datetime | None
+    # Markdown; the charts it shows point to the `url` of `charts`.
     answer: str | None
     # How the answer was produced (plan, files consulted, tool calls).
     trace: RunTrace | None = None
+    charts: list[EphemeralChartOut] = []
 
 
 class UserIndexRebuildIn(BaseModel):
