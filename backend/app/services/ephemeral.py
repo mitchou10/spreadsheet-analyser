@@ -7,8 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import EphemeralSettings
-from app.models import AnalysisStatus, Collection, Message, Run
-from app.repositories import CollectionRepository, ConversationRepository, MessageRepository
+from app.models import AnalysisStatus, Chart, ChartStatus, Collection, Message, Run
+from app.repositories import ChartRepository, CollectionRepository, ConversationRepository, MessageRepository
 from app.services.actor import Actor
 from app.services.analysis import AnalysisService
 from app.services.collection import CollectionService
@@ -53,6 +53,8 @@ class EphemeralRun:
     analysis_id: uuid.UUID
     # The assistant's answer once the run is completed.
     answer: Message | None
+    # The charts the run drew (the images are read with `read_chart`).
+    charts: list[Chart]
 
 
 class EphemeralService:
@@ -73,6 +75,7 @@ class EphemeralService:
         self.collection_repo = CollectionRepository(session)
         self.conversation_repo = ConversationRepository(session)
         self.messages = MessageRepository(session)
+        self.chart_repo = ChartRepository(session)
 
     async def create(
         self, actor: Actor, uploads: list[tuple[str, bytes, str | None]], ttl_hours: int | None = None
@@ -163,7 +166,20 @@ class EphemeralService:
         if conversation is None or conversation.ephemeral_collection_id is None:
             raise NotFoundError(f"Run {run_id} not found")  # a run of the chat, not of an ephemeral analysis
         answer = await self.messages.get(run.result_message_id) if run.result_message_id else None
-        return EphemeralRun(run=run, analysis_id=conversation.ephemeral_collection_id, answer=answer)
+        return EphemeralRun(
+            run=run,
+            analysis_id=conversation.ephemeral_collection_id,
+            answer=answer,
+            charts=await self.chart_repo.list_by_run(run.id),
+        )
+
+    async def read_chart(self, actor: Actor, run_id: uuid.UUID, chart_id: uuid.UUID) -> bytes:
+        """The PNG of a chart drawn by one of the creator's runs."""
+        item = await self.get_run(actor, run_id)
+        chart = next((c for c in item.charts if c.id == chart_id), None)
+        if chart is None or chart.status != ChartStatus.COMPLETED:
+            raise NotFoundError(f"Chart {chart_id} not found")
+        return await self.storage.get_object(chart.s3_key)
 
     async def delete(self, actor: Actor, analysis_id: uuid.UUID) -> None:
         await self._purge(await self._owned(actor, analysis_id))

@@ -225,3 +225,46 @@ async def test_upload_is_validated_over_http(api) -> None:
     too_long = await api.post("/api/ephemeral/analyses", files=[("files", CSV)], data={"ttl_hours": "100000"})
     assert too_long.status_code == 422
     assert (await api.post("/api/ephemeral/analyses/not-a-uuid/runs", json={"query": "x"})).status_code == 422
+
+
+async def test_the_charts_of_a_run_are_read_through_the_run(api, session, storage, dispatcher) -> None:
+    from app.dependencies import get_actor
+    from app.services import Actor, ChartService, SqlQueryService
+    from app.services.chart import chart_markdown
+
+    created = (await api.post("/api/ephemeral/analyses", files=[("files", CSV)])).json()
+    await _finish(session, storage, dispatcher, uuid.UUID(created["id"]))
+    run_id = uuid.UUID(
+        (await api.post(f"/api/ephemeral/analyses/{created['id']}/runs", json={"query": "Un graphique"})).json()["id"]
+    )
+    runs = RunService(session, dispatcher)
+    await runs.start(run_id)
+    file_id = uuid.UUID(created["files"][0]["id"])
+    queries = SqlQueryService(session, dispatcher)
+    query = await queries.create(run_id, 'SELECT 1 AS "n"', {"f1": file_id})
+    await queries.start(query.id)
+    await queries.complete(query.id, {"columns": [{"name": "n", "type": "BIGINT"}], "rows": [[1]], "truncated": False})
+    charts = ChartService(session, dispatcher, storage)
+    chart = await charts.create(
+        run_id, query.id, {"type": "bar", "x": "région", "y": ["total"], "title": "Total par région"}
+    )
+    await charts.start(chart.id)
+    await storage.put_object(chart.s3_key, b"\x89PNG\r\n\x1a\nfake")
+    await charts.complete(chart.id, chart.s3_key, 640, 480)
+    await runs.complete(run_id, f"Voici le total.\n\n{chart_markdown(chart)}")
+
+    run = (await api.get(f"/api/ephemeral/runs/{run_id}")).json()
+
+    url = f"/api/ephemeral/runs/{run_id}/charts/{chart.id}"
+    assert [(c["id"], c["title"], c["status"], c["url"]) for c in run["charts"]] == [
+        (str(chart.id), "Total par région", "completed", url)
+    ]
+    assert url in run["answer"] and "/api/conversations/" not in run["answer"]  # the answer points to the run's route
+    image = await api.get(url)
+    assert image.status_code == 200 and image.headers["content-type"] == "image/png"
+    assert image.content == b"\x89PNG\r\n\x1a\nfake"
+    unknown = "00000000-0000-0000-0000-000000000000"
+    assert (await api.get(f"/api/ephemeral/runs/{run_id}/charts/{unknown}")).status_code == 404
+
+    app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
+    assert (await api.get(url)).status_code == 404

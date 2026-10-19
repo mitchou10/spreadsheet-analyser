@@ -2,13 +2,14 @@ import uuid
 from dataclasses import asdict
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 
 from app.config import S3Settings
 from app.dependencies import ActorDep, EphemeralServiceDep, ModelCatalogDep, require_internal_token
 from app.routers.collections import ALLOWED_EXTENSIONS
 from app.routers.conversations import _check_model
-from app.schemas import EphemeralAnalysisOut, EphemeralRunCreate, EphemeralRunOut, RunOut
+from app.schemas import EphemeralAnalysisOut, EphemeralChartOut, EphemeralRunCreate, EphemeralRunOut, RunOut
+from app.services.chart import chart_url
 from app.services.ephemeral import EphemeralRun
 
 router = APIRouter(prefix="/ephemeral", tags=["Ephemeral analysis"])
@@ -18,8 +19,18 @@ internal_router = APIRouter(
 _settings = S3Settings()
 
 
+def _chart_url(run_id: uuid.UUID, chart_id: uuid.UUID) -> str:
+    return f"/api/ephemeral/runs/{run_id}/charts/{chart_id}"
+
+
 def _run_out(item: EphemeralRun) -> EphemeralRunOut:
     run = item.run
+    answer = item.answer.content if item.answer else None
+    if answer:
+        # The answer shows its charts through the chat's route (under the conversation, which an API client never
+        # sees): point them to the route of the run instead.
+        for chart in item.charts:
+            answer = answer.replace(chart_url(chart), _chart_url(run.id, chart.id))
     return EphemeralRunOut(
         id=run.id,
         analysis_id=item.analysis_id,
@@ -28,8 +39,20 @@ def _run_out(item: EphemeralRun) -> EphemeralRunOut:
         model=run.model,
         created_at=run.created_at,
         finished_at=run.finished_at,
-        answer=item.answer.content if item.answer else None,
+        answer=answer,
         trace=item.answer.trace if item.answer else None,
+        charts=[
+            EphemeralChartOut(
+                id=c.id,
+                title=c.title,
+                status=c.status,
+                error=c.error,
+                width=c.width,
+                height=c.height,
+                url=_chart_url(run.id, c.id),
+            )
+            for c in item.charts
+        ],
     )
 
 
@@ -98,6 +121,23 @@ async def create_run(
 @router.get("/runs/{run_id}", summary="Status of a run and, once completed, the assistant's answer")
 async def get_run(run_id: uuid.UUID, actor: ActorDep, service: EphemeralServiceDep) -> EphemeralRunOut:
     return _run_out(await service.get_run(actor, run_id))
+
+
+@router.get(
+    "/runs/{run_id}/charts/{chart_id}",
+    summary="The image of a chart drawn by a run (PNG)",
+    response_class=Response,
+    responses={200: {"content": {"image/png": {}}}},
+)
+async def get_chart_image(
+    run_id: uuid.UUID, chart_id: uuid.UUID, actor: ActorDep, service: EphemeralServiceDep
+) -> Response:
+    image = await service.read_chart(actor, run_id, chart_id)
+    return Response(
+        content=image,
+        media_type="image/png",
+        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
+    )
 
 
 @router.delete(
