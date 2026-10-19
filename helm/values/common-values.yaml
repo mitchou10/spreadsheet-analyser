@@ -218,6 +218,14 @@ jobs:
       # Empty: the chart's appVersion, so the migration always matches the deployed backend.
       tag: ""
     command: ["alembic", "upgrade", "head"]
+    # Required by the namespace quota (`dso-quota`): a pod without requests and limits is refused.
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
     envFrom:
       - secretRef:
           name: "spreadsheet-analyser-db-infos"
