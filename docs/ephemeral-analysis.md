@@ -54,7 +54,8 @@ celles du chat. Un graphique n'existe que tant que l'analyse n'a pas expiré : r
 ## Durée de vie
 
 `ttl_hours` (défaut `EPHEMERAL_DEFAULT_TTL_HOURS` = 24, maximum `EPHEMERAL_MAX_TTL_HOURS` = 720) est la durée de
-conservation **après le dernier run** : `expires_at` avance à chaque question. Passé ce délai, les fichiers (S3), les
+conservation **après la fin du dernier run** (réussi, échoué ou annulé) : `expires_at` avance au lancement de chaque
+question et de nouveau à sa fin, quelle qu'ait été sa durée. Une analyse dont un run est en cours n'est jamais purgée. Passé ce délai, les fichiers (S3), les
 analyses, la conversation, les requêtes et les graphiques sont supprimés, et les routes répondent 404.
 
 La purge tourne dans le backend toutes les `EPHEMERAL_PURGE_INTERVAL_SECONDS` secondes (600 par défaut ; un verrou

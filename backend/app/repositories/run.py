@@ -1,6 +1,6 @@
 import uuid
 
-from app.models import ACTIVE_RUN_STATUSES, Run
+from app.models import ACTIVE_RUN_STATUSES, Conversation, Run
 from app.repositories.base import BaseRepository
 
 
@@ -14,6 +14,16 @@ class RunRepository(BaseRepository[Run]):
             .order_by(Run.created_at.desc())
             .limit(1)
         )
+
+    async def has_active_for_ephemeral(self, collection_id: uuid.UUID) -> bool:
+        """A run of the ephemeral analysis (the collection) is queued or running."""
+        found = await self._first(
+            self._select()
+            .join(Conversation, Conversation.id == Run.conversation_id)
+            .where(Conversation.ephemeral_collection_id == collection_id, Run.status.in_(ACTIVE_RUN_STATUSES))
+            .limit(1)
+        )
+        return found is not None
 
     async def get_by_result_message(self, message_id: uuid.UUID) -> Run | None:
         return await self._first(self._select().where(Run.result_message_id == message_id).limit(1))

@@ -8,7 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import EphemeralSettings
 from app.models import AnalysisStatus, Chart, ChartStatus, Collection, Message, Run
-from app.repositories import ChartRepository, CollectionRepository, ConversationRepository, MessageRepository
+from app.repositories import (
+    ChartRepository,
+    CollectionRepository,
+    ConversationRepository,
+    MessageRepository,
+    RunRepository,
+)
 from app.services.actor import Actor
 from app.services.analysis import AnalysisService
 from app.services.collection import CollectionService
@@ -75,6 +81,7 @@ class EphemeralService:
         self.collection_repo = CollectionRepository(session)
         self.conversation_repo = ConversationRepository(session)
         self.messages = MessageRepository(session)
+        self.run_repo = RunRepository(session)
         self.chart_repo = ChartRepository(session)
 
     async def create(
@@ -192,6 +199,8 @@ class EphemeralService:
         try:
             purged = 0
             for collection in await self.collection_repo.list_expired(datetime.now(UTC)):
+                if await self.run_repo.has_active_for_ephemeral(collection.id):
+                    continue  # the worker is using it: it is looked at again once the run is over
                 try:
                     await self._purge(collection)
                     purged += 1
