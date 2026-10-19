@@ -509,6 +509,45 @@ class FeedbackReviewOut(BaseModel):
     run_id: uuid.UUID | None
 
 
+class EphemeralFileOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    size_bytes: int
+    # The pre-analysis of this file.
+    status: AnalysisStatus
+    error: str | None
+
+
+class EphemeralAnalysisOut(BaseModel):
+    id: uuid.UUID
+    # processing (a file is still being analysed), ready (all of them are), partial (some failed) or failed.
+    status: Literal["processing", "ready", "partial", "failed"]
+    # Everything is deleted at this date; it moves forward with each run.
+    expires_at: datetime
+    files: list[EphemeralFileOut]
+
+
+class EphemeralRunCreate(BaseModel):
+    query: str = Field(min_length=1, max_length=20000)
+    # An id from GET /models; omitted = the default model.
+    model: str | None = None
+
+
+class EphemeralRunOut(BaseModel):
+    """The run and, once it is completed, the assistant's answer (the same as in the chat)."""
+
+    id: uuid.UUID
+    analysis_id: uuid.UUID
+    status: RunStatus
+    error: str | None
+    model: str | None
+    created_at: datetime
+    finished_at: datetime | None
+    answer: str | None
+    # How the answer was produced (plan, files consulted, tool calls).
+    trace: RunTrace | None = None
+
+
 class UserIndexRebuildIn(BaseModel):
     email: str = Field(max_length=320)
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -6,23 +7,37 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import KeycloakSettings
+from app.config import EphemeralSettings, KeycloakSettings
+from app.db import async_session
 from app.dependencies import get_storage
 from app.routers.admin import router as admin_router
 from app.routers.auth import router as auth_router
 from app.routers.charts import internal_router as charts_internal_router
 from app.routers.collections import collections_router, files_router
 from app.routers.conversations import router as conversations_router
+from app.routers.ephemeral import internal_router as ephemeral_internal_router
+from app.routers.ephemeral import router as ephemeral_router
 from app.routers.health import router as health_router
 from app.routers.models import router as models_router
 from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
-from app.services import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError
+from app.services import ConflictError, EphemeralService, ForbiddenError, InvalidRequestError, NotFoundError
 
 _keycloak_settings = KeycloakSettings()
 
 logger = logging.getLogger(__name__)
+
+
+async def _purge_expired_forever(interval: int) -> None:
+    """Deletes the expired ephemeral analyses now and then. A failure is logged and tried again at the next round."""
+    while True:
+        try:
+            async with async_session() as session:
+                await EphemeralService(session, get_storage()).purge_expired()
+        except Exception:
+            logger.exception("Purge of the expired ephemeral analyses failed")
+        await asyncio.sleep(interval)
 
 
 @asynccontextmanager
@@ -32,7 +47,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     except Exception:
         # Don't block startup: /api/health and auth keep working while S3 is down.
         logger.exception("Could not ensure the S3 bucket exists")
+    interval = EphemeralSettings().EPHEMERAL_PURGE_INTERVAL_SECONDS
+    purger = asyncio.create_task(_purge_expired_forever(interval)) if interval > 0 else None
     yield
+    if purger is not None:
+        purger.cancel()
 
 
 app = FastAPI(
@@ -46,6 +65,10 @@ app = FastAPI(
         {"name": "Admin", "description": "Who has access to what (administrators only)."},
         {"name": "Collections", "description": "Collections, their files (upload) and sharing."},
         {"name": "Conversations", "description": "Chat conversations and their messages (private to their creator)."},
+        {
+            "name": "Ephemeral analysis",
+            "description": "Upload spreadsheets, wait for their pre-analysis, ask a question: nothing is kept.",
+        },
         {"name": "Models", "description": "LLMs available to the assistant."},
         {"name": "Runs", "description": "Asynchronous assistant runs started by a message."},
         {"name": "Files", "description": "Download, delete and analysis control of a single file."},
@@ -68,6 +91,8 @@ app.include_router(admin_router, prefix="/api")
 app.include_router(collections_router, prefix="/api")
 app.include_router(files_router, prefix="/api")
 app.include_router(conversations_router, prefix="/api")
+app.include_router(ephemeral_router, prefix="/api")
+app.include_router(ephemeral_internal_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")

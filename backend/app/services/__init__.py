@@ -4,6 +4,7 @@ from app.services.analysis import AnalysisService
 from app.services.chart import ChartService
 from app.services.collection import CollectionService
 from app.services.conversation import ConversationService
+from app.services.ephemeral import EphemeralService
 from app.services.errors import ConflictError, ForbiddenError, InvalidRequestError, NotFoundError
 from app.services.feedback import FeedbackService
 from app.services.file import FileService
@@ -15,6 +16,7 @@ __all__ = [
     "Actor",
     "AdminService",
     "ConflictError",
+    "EphemeralService",
     "ForbiddenError",
     "InvalidRequestError",
     "AnalysisService",

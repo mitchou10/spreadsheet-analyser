@@ -213,10 +213,18 @@ class AnalysisService:
         the analysis is valid either way, and the agent indexes in memory what the saved index lacks."""
         if self.dispatcher is None:
             return
+        if await self._is_ephemeral(analysis_id):
+            return  # nobody searches it later, and it must not end up in the owner's own search index
         try:
             await self.dispatcher.enqueue_index_file(analysis_id)
         except Exception:
             logger.exception("Could not enqueue the indexing of analysis %s", analysis_id)
+
+    async def _is_ephemeral(self, analysis_id: uuid.UUID) -> bool:
+        analysis = await self.analyses.get(analysis_id)
+        file = await self.files.files.get(analysis.file_id) if analysis else None
+        collection = await self.files.collections.collections.get(file.collection_id) if file else None
+        return collection is not None and collection.expires_at is not None
 
     async def forget_file(self, collection_id: uuid.UUID, file_id: uuid.UUID) -> None:
         """A file was deleted: have it removed from its collection's search index. Best effort, because a
