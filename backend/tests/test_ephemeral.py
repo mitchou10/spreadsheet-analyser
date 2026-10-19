@@ -268,3 +268,50 @@ async def test_the_charts_of_a_run_are_read_through_the_run(api, session, storag
 
     app.dependency_overrides[get_actor] = lambda: Actor(user_id=BOB.user_id, email=BOB.email)
     assert (await api.get(url)).status_code == 404
+
+
+async def test_the_time_to_read_the_result_starts_when_the_run_ends(session, storage, dispatcher, service) -> None:
+    created = await service.create(ALICE, [CSV], ttl_hours=2)
+    await _finish(session, storage, dispatcher, created.id)
+    run = await service.start_run(ALICE, created.id, "Total ?")
+    collection = await CollectionRepository(session).get(created.id)
+    collection.expires_at = datetime.now(UTC) + timedelta(minutes=5)  # the run waited and ran for a long time
+    await session.commit()
+
+    runs = RunService(session, dispatcher)
+    await runs.start(run.id)
+    await runs.complete(run.id, "Voilà.")
+
+    left = (await service.get(ALICE, created.id)).expires_at - datetime.now(UTC)
+    assert timedelta(hours=1, minutes=55) < left <= timedelta(hours=2)
+
+
+@pytest.mark.parametrize("how", ["fail", "cancel"])
+async def test_a_failed_or_cancelled_run_also_gives_time(session, storage, dispatcher, service, how) -> None:
+    created = await service.create(ALICE, [CSV], ttl_hours=2)
+    await _finish(session, storage, dispatcher, created.id)
+    run = await service.start_run(ALICE, created.id, "Total ?")
+    (await CollectionRepository(session).get(created.id)).expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    await session.commit()
+
+    runs = RunService(session, dispatcher)
+    if how == "fail":
+        await runs.fail(run.id, "boom")
+    else:
+        await runs.cancel(ALICE, run.id)
+
+    assert (await service.get(ALICE, created.id)).expires_at - datetime.now(UTC) > timedelta(hours=1, minutes=55)
+
+
+async def test_an_analysis_with_a_run_in_progress_is_not_purged(session, storage, dispatcher, service) -> None:
+    created = await service.create(ALICE, [CSV])
+    await _finish(session, storage, dispatcher, created.id)
+    run = await service.start_run(ALICE, created.id, "Total ?")
+    (await CollectionRepository(session).get(created.id)).expires_at = datetime.now(UTC) - timedelta(minutes=1)
+    await session.commit()
+
+    assert await service.purge_expired() == 0
+    assert (await service.get(ALICE, created.id)).id == created.id
+
+    await RunService(session, dispatcher).cancel(ALICE, run.id)  # over: it gets its time to be read, not purged
+    assert await service.purge_expired() == 0

@@ -2,11 +2,12 @@ import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import EphemeralSettings
 from app.models import ACTIVE_RUN_STATUSES, AnalysisStatus, File, Message, MessageRole, Run, RunStatus
 from app.repositories import (
     AccessCollectionRepository,
@@ -382,6 +383,17 @@ class RunService:
 
     # --- internals ---
 
+    async def _extend_ephemeral(self, run: Run) -> None:
+        """The time to read the result of an ephemeral analysis starts when the run ends, however long it waited and
+        ran: the expiry moves to at least `ttl_hours` from now."""
+        conversation = await self.conversations.conversations.get(run.conversation_id)
+        if conversation is None or conversation.ephemeral_collection_id is None:
+            return
+        collection = await self.collections.get(conversation.ephemeral_collection_id)
+        if collection is not None and collection.expires_at is not None:
+            ttl = collection.ttl_hours or EphemeralSettings().EPHEMERAL_DEFAULT_TTL_HOURS
+            collection.expires_at = max(collection.expires_at, datetime.now(UTC) + timedelta(hours=ttl))
+
     async def _enqueue(self, run: Run) -> None:
         """Hands a committed run to the worker; if the worker is unreachable the run fails instead of hanging."""
         # After the commit: the worker must be able to see the run as soon as it receives the task.
@@ -413,6 +425,7 @@ class RunService:
         run.status = status
         run.error = error
         run.finished_at = datetime.now(UTC)
+        await self._extend_ephemeral(run)
         await self.session.commit()
         await self.session.refresh(run)
         return run
