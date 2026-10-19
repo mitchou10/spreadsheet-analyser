@@ -63,7 +63,7 @@ backend:
     - secretRef:
         name: "spreadsheet-analyser-redis"
     - secretRef:
-        name: "spreadsheet-analyser-db"
+        name: "spreadsheet-analyser-db-infos"
   # Plain (non-secret) app config - see backend/app/config/*.py for the full settings contract.
   env:
     KEYCLOAK_URL: "https://keycloak.example.org"
@@ -220,7 +220,7 @@ jobs:
     command: ["alembic", "upgrade", "head"]
     envFrom:
       - secretRef:
-          name: "spreadsheet-analyser-db"
+          name: "spreadsheet-analyser-db-infos"
     podSecurityContext:
       runAsNonRoot: true
       runAsUser: 1000
@@ -361,7 +361,25 @@ extraObjects:
             REDIS_URL:
               text: 'redis://:{{ "{{" }} get .Secrets "REDIS_PASSWORD" {{ "}}" }}@spreadsheet-analyser-redis:6379/0'
 
-  # Same Vault path as `spreadsheet-analyser-db`: the owner CNPG creates with `initdb`. CNPG requires a
+  # Superuser of the CNPG cluster (`cnpg.cluster.superuserSecret`). Vault keys: username (`postgres`), password.
+  # Like the appuser, CNPG requires a kubernetes.io/basic-auth Secret.
+  spreadsheet-analyser-db-superuser:
+    apiVersion: secrets.hashicorp.com/v1beta1
+    kind: VaultStaticSecret
+    metadata:
+      name: spreadsheet-analyser-db-superuser
+    spec:
+      vaultAuthRef: vault-auth
+      mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
+      type: kv-v2
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db-superuser'
+      refreshAfter: 60s
+      destination:
+        name: spreadsheet-analyser-db-superuser
+        create: true
+        type: kubernetes.io/basic-auth
+
+  # The owner CNPG creates with `initdb` (same Vault path as `spreadsheet-analyser-db-infos`, like Muffin). CNPG requires a
   # kubernetes.io/basic-auth Secret (keys username + password): with an Opaque one (the VSO default) the
   # Cluster waits forever.
   spreadsheet-analyser-db-appuser:
@@ -373,7 +391,7 @@ extraObjects:
       vaultAuthRef: vault-auth
       mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db'
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db-appuser'
       refreshAfter: 60s
       destination:
         name: spreadsheet-analyser-db-appuser
@@ -385,22 +403,22 @@ extraObjects:
   # (`cnpg.fullnameOverride` + `-rw`). Only DATABASE_URL reaches the pods:
   # `excludes` drops the raw username/password. The driver MUST be postgresql+asyncpg (backend/app/config/
   # database.py). Same assumption on URL-reserved characters as above.
-  spreadsheet-analyser-db:
+  spreadsheet-analyser-db-infos:
     apiVersion: secrets.hashicorp.com/v1beta1
     kind: VaultStaticSecret
     metadata:
-      name: spreadsheet-analyser-db
+      name: spreadsheet-analyser-db-infos
     spec:
       vaultAuthRef: vault-auth
       mount: '{{ required "global.vaultMount is required (exploration...)" .Values.global.vaultMount }}'
       type: kv-v2
-      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db'
+      path: '{{ required "global.vaultEnv is required (dev, staging, prod...)" .Values.global.vaultEnv }}/spreadsheet-analyser/db-appuser'
       refreshAfter: 60s
       rolloutRestartTargets:
         - kind: Deployment
           name: '{{ include "helper.componentFullname" (dict "root" . "componentName" "backend") }}'
       destination:
-        name: spreadsheet-analyser-db
+        name: spreadsheet-analyser-db-infos
         create: true
         transformation:
           excludes:
@@ -443,7 +461,7 @@ rustfs:
 
 cnpg:
   enabled: true
-  # The read-write Service is `<fullnameOverride>-rw`: it is the host of DATABASE_URL (`spreadsheet-analyser-db`).
+  # The read-write Service is `<fullnameOverride>-rw`: it is the host of DATABASE_URL (`spreadsheet-analyser-db-infos`).
   fullnameOverride: "spreadsheet-analyser-pg-cluster"
   mode: "standalone"
   cluster:
@@ -462,6 +480,8 @@ cnpg:
       limits:
         cpu: "500m"
         memory: "1Gi"
+    enableSuperuserAccess: true
+    superuserSecret: "spreadsheet-analyser-db-superuser"
     initdb:
       database: "spreadsheet_analyser"
       owner: "spreadsheet_analyser"
