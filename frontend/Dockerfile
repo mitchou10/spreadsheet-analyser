@@ -16,6 +16,7 @@ RUN if [ -n "$VITE_API_BASE_URL" ]; then VITE_API_BASE_URL="$VITE_API_BASE_URL" 
 # is required to get a non-root container.
 FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
 COPY --chown=nginx:nginx docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=nginx:nginx --chmod=755 docker/40-runtime-config.sh /docker-entrypoint.d/40-runtime-config.sh
 COPY --chown=nginx:nginx --from=build /app/dist /usr/share/nginx/html
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

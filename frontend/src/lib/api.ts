@@ -2,7 +2,11 @@
 // is scoped to the backend origin, and its CORS config explicitly allows the frontend one.
 // Empty (the default) means same origin: the ingress routes /api to the backend. For a split-host setup
 // (docker-compose), VITE_API_BASE_URL points to it, e.g. http://localhost:8000.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+//
+// Order: the runtime config of the container (/config.js, from the `API_BASE_URL` environment variable), then the
+// build-time VITE_API_BASE_URL (local dev), then the same origin.
+const runtimeApiBaseUrl = (window as { __APP_CONFIG__?: { API_BASE_URL?: string } }).__APP_CONFIG__?.API_BASE_URL
+export const API_BASE_URL = runtimeApiBaseUrl || (import.meta.env.VITE_API_BASE_URL ?? '')
 
 export class ApiError extends Error {
   status: number
