@@ -17,6 +17,7 @@ from app.services.chart import ChartService, chart_markdown
 from tests.actors import ALICE, BOB
 
 CSV = b"region,total\nNord,10\nSud,20\n"
+SHA = hashlib.sha256(CSV).hexdigest()
 FILE = {"name": "ventes.csv", "content_base64": base64.b64encode(CSV).decode(), "mimetype": "text/csv"}
 
 
@@ -49,7 +50,57 @@ async def call(name: str, **arguments) -> dict:
     return result.structured_content
 
 
-async def finish_analyses(session, storage, dispatcher, analysis_id: str, fail: bool = False) -> None:
+SALES = {
+    "file": {"name": "ventes.csv", "format": "csv", "size_bytes": 29},
+    "summary": {"sheets": 1, "rows": 2, "truncated": False},
+    "sheets": [
+        {
+            "index": 0,
+            "name": "ventes",
+            "rows": 2,
+            "header_detected": True,
+            "columns": [
+                {
+                    "index": 0,
+                    "name": "region",
+                    "type": "text",
+                    "non_null": 2,
+                    "null": 0,
+                    "distinct": 2,
+                    "type_counts": {"text": 2},
+                    "sample_values": ["Nord", "Sud"],
+                    "top_values": [{"value": f"v{i}", "count": 1} for i in range(8)],
+                },
+                {
+                    "index": 1,
+                    "name": "total",
+                    "type": "integer",
+                    "non_null": 2,
+                    "null": 0,
+                    "distinct": 2,
+                    "type_counts": {"number": 2},
+                    "sample_values": [10, 20],
+                    "numeric": {
+                        "count": 2,
+                        "min": 10,
+                        "max": 20,
+                        "sum": 30,
+                        "mean": 15,
+                        "std": 7.07,
+                        "median": 15,
+                        "p25": 12.5,
+                        "p75": 17.5,
+                        "quantiles_exact": True,
+                    },
+                },
+            ],
+            "preview": [["Nord", 10], ["Sud", 20], ["Est", 30], ["Ouest", 40]],
+        }
+    ],
+}
+
+
+async def finish_analyses(session, storage, dispatcher, analysis_id: str, fail: bool = False, result=None) -> None:
     """What the analysis worker does for each file."""
     analyses = AnalysisService(session, storage, dispatcher)
     files = await EphemeralService(session, storage, dispatcher).files.files.list_by_collection(uuid.UUID(analysis_id))
@@ -59,7 +110,7 @@ async def finish_analyses(session, storage, dispatcher, analysis_id: str, fail: 
             await analyses.fail(analysis.id, "unreadable")
             continue
         context = await analyses.context(analysis.id)
-        await storage.put_json(context.result_key, {"sheets": []})
+        await storage.put_json(context.result_key, result if result is not None else {"sheets": []})
         await analyses.complete(analysis.id, context.result_key)
 
 
@@ -202,9 +253,93 @@ async def test_nothing_is_visible_to_someone_else(mcp, session, storage, dispatc
     assert (await call("delete_analysis", analysis_id=analysis_id))["status_code"] == 404
 
 
-# --- files named by their hash ---
+# --- the analysis alone, without a question ---
 
-SHA = hashlib.sha256(CSV).hexdigest()
+
+async def ready_in_time(monkeypatch, session, storage, dispatcher, result=SALES) -> None:
+    """The workers finish the pre-analysis while `analyze_files` waits for it."""
+
+    async def workers_finish(analysis_id, actor, seconds):
+        await finish_analyses(session, storage, dispatcher, str(analysis_id), result=result)
+        async with mcp_module.async_session() as s:
+            return await mcp_module._service(s).get(actor, analysis_id)
+
+    monkeypatch.setattr(mcp_module, "_wait_until_analysed", workers_finish)
+
+
+async def test_the_analysis_of_the_files_without_a_question(mcp, session, storage, dispatcher, monkeypatch) -> None:
+    await ready_in_time(monkeypatch, session, storage, dispatcher)
+    enqueued = list(dispatcher.enqueued)
+
+    described = await call("analyze_files", files=[FILE])
+
+    assert described["status"] == "ready" and "run_id" not in described
+    assert dispatcher.enqueued == enqueued  # no question: the assistant was not asked anything
+    [file] = described["files"]
+    profile = file["profile"]
+    assert profile["format"] == "csv" and profile["summary"] == {"sheets": 1, "rows": 2, "truncated": False}
+    [sheet] = profile["sheets"]
+    assert (sheet["name"], sheet["rows"], sheet["header_detected"]) == ("ventes", 2, True)
+    region, total = sheet["columns"]
+    assert (region["name"], region["type"], region["distinct"]) == ("region", "text", 2)
+    assert len(region["top_values"]) == 5 and "type_counts" not in region  # an overview, not every statistic
+    assert total["numeric"] == {"min": 10, "max": 20, "mean": 15, "median": 15, "sum": 30}
+    assert len(sheet["preview"]) == 3
+
+
+async def test_get_analysis_gives_the_overview_the_whole_analysis_or_nothing(
+    mcp, session, storage, dispatcher, monkeypatch
+) -> None:
+    await ready_in_time(monkeypatch, session, storage, dispatcher)
+    analysis_id = (await call("analyze_files", files=[FILE]))["analysis_id"]
+
+    summary = await call("get_analysis", analysis_id=analysis_id)
+    full = await call("get_analysis", analysis_id=analysis_id, detail="full")
+    none = await call("get_analysis", analysis_id=analysis_id, detail="none")
+
+    assert "numeric" in summary["files"][0]["profile"]["sheets"][0]["columns"][1]
+    assert full["files"][0]["profile"] == SALES  # everything, as the worker wrote it
+    assert "profile" not in none["files"][0] and none["status"] == "ready"
+    assert (await call("get_analysis", analysis_id=analysis_id, detail="huge"))["status_code"] == 422
+
+
+async def test_the_whole_analysis_is_replaced_by_its_overview_when_too_big(
+    mcp, session, storage, dispatcher, monkeypatch
+) -> None:
+    await ready_in_time(monkeypatch, session, storage, dispatcher)
+    analysis_id = (await call("analyze_files", files=[FILE]))["analysis_id"]
+    monkeypatch.setenv("MCP_MAX_PROFILE_BYTES", "100")
+
+    full = await call("get_analysis", analysis_id=analysis_id, detail="full")
+
+    assert "type_counts" not in full["files"][0]["profile"]["sheets"][0]["columns"][0]
+    assert "overview" in full["note"]
+
+
+async def test_the_analysis_is_not_given_while_the_files_are_being_analysed(mcp) -> None:
+    waiting = await call("analyze_files", files=[FILE])
+
+    assert waiting["status"] == "processing" and "profile" not in waiting["files"][0]
+    assert "get_analysis" in waiting["note"]
+
+
+async def test_known_files_can_be_described_without_a_question(mcp, session, storage, dispatcher, monkeypatch) -> None:
+    waiting = mcp_module._wait_until_analysed
+    await ready_in_time(monkeypatch, session, storage, dispatcher)
+    await call("analyze_files", files=[FILE])
+    monkeypatch.setattr(mcp_module, "_wait_until_analysed", waiting)  # the copy is ready at once: nothing to wait for
+    enqueued = list(dispatcher.enqueued)
+
+    described = await call("ask_known_files", file_hashes=[SHA])
+
+    assert described["files"][0]["profile"]["sheets"][0]["name"] == "ventes"
+    assert dispatcher.enqueued == enqueued
+    other = hashlib.sha256(b"never sent").hexdigest()
+    missing = await call("ask_known_files", file_hashes=[other])
+    assert missing["missing_hashes"] == [other] and "same question" not in missing["prompt"]
+
+
+# --- files named by their hash ---
 
 
 async def analysed_file(mcp_session, storage, dispatcher) -> str:

@@ -6,6 +6,7 @@ the rules (ownership, expiry, purge) and the data. See docs/mcp.md for the clien
 import asyncio
 import base64
 import binascii
+import json
 import logging
 import uuid
 from typing import Any
@@ -18,6 +19,7 @@ from app.config import KeycloakSettings, McpSettings
 from app.db import async_session
 from app.dependencies import get_dispatcher, get_model_catalog, get_storage
 from app.mcp.auth import KeycloakTokenVerifier, actor_of
+from app.mcp.profile import summarize
 from app.models import ChartStatus
 from app.routers.collections import ALLOWED_EXTENSIONS
 from app.services import ConflictError, EphemeralService, InvalidRequestError, NotFoundError, UnknownFilesError
@@ -50,7 +52,9 @@ mcp_server = MCPServer(
         "`charts`. To ask another question about the same files call `ask` with the `analysis_id`; to ask about "
         "files analysed before, without sending them again, call `ask_known_files` with their `sha256`. Call "
         "`delete_analysis` when you are done; otherwise everything is deleted by itself after `ttl_hours` (24 by "
-        "default) following the last run."
+        "default) following the last run. To only get the analysis of files (their sheets, columns, types and "
+        "statistics) without a question, call `analyze_files` or `ask_known_files` without `query`, or "
+        "`get_analysis`."
     ),
 )
 
@@ -77,21 +81,24 @@ async def _check_model(model: str | None) -> None:
         await get_model_catalog().ensure_available(model)
 
 
-def _analysis_json(analysis: EphemeralAnalysis) -> dict[str, Any]:
+def _analysis_json(analysis: EphemeralAnalysis, profiles: dict[uuid.UUID, dict] | None = None) -> dict[str, Any]:
+    """The state of an analysis; `profiles` (by file id) adds the analysis of each file that has one."""
+    files = [
+        {
+            "name": f.name,
+            "sha256": f.sha256,
+            "size_bytes": f.size_bytes,
+            "status": f.status.value,
+            "error": f.error,
+            **({"profile": profiles[f.file_id]} if profiles and f.file_id in profiles else {}),
+        }
+        for f in analysis.files
+    ]
     return {
         "analysis_id": str(analysis.id),
         "status": analysis.status,
         "expires_at": analysis.expires_at.isoformat(),
-        "files": [
-            {
-                "name": f.name,
-                "sha256": f.sha256,
-                "size_bytes": f.size_bytes,
-                "status": f.status.value,
-                "error": f.error,
-            }
-            for f in analysis.files
-        ],
+        "files": files,
     }
 
 
@@ -168,19 +175,23 @@ async def _wait_until_analysed(analysis_id: uuid.UUID, actor, seconds: int) -> E
 @mcp_server.tool()
 async def analyze_files(
     files: list[dict[str, str]],
-    query: str,
+    query: str | None = None,
     model: str | None = None,
     ttl_hours: int | None = None,
 ) -> dict[str, Any]:
-    """Uploads spreadsheets and asks a question about them, in one call.
+    """Uploads spreadsheets and, optionally, asks a question about them, in one call.
 
     files: [{"name": "sales.xlsx", "content_base64": "<base64 of the file>", "mimetype": "<optional>"}], csv, xlsx,
-    xls or ods, 20 files at most. query: the question, in natural language. model: an id of the provider
-    (optional). ttl_hours: how long everything is kept after the last run (default 24).
+    xls or ods, 20 files at most. query: the question, in natural language (leave it out to only get the analysis of
+    the files). model: an id of the provider (optional). ttl_hours: how long everything is kept after the last run
+    (default 24).
 
-    The files are first pre-analysed, which takes a few seconds; this call waits for it. It returns
-    {"analysis_id", "run_id", "status"}: follow the run with `get_run`. If the pre-analysis is not over yet, it
-    returns only {"analysis_id", "status": "processing"}: ask again later with `ask` (or look with `get_analysis`).
+    The files are first pre-analysed, which takes a few seconds; this call waits for it.
+    - With a question it returns {"analysis_id", "run_id", "status"}: follow the run with `get_run`.
+    - Without one it returns the analysis of each file in `files[].profile`: sheets, columns with their type, fill,
+      distinct values and statistics, and the first rows. Ask later with `ask`, or get more detail with
+      `get_analysis`.
+    If the pre-analysis is not over yet, it returns only {"analysis_id", "status": "processing"}: call `get_analysis`.
     """
     try:
         actor = actor_of(get_access_token())
@@ -193,11 +204,38 @@ async def analyze_files(
         return _error(error)
 
 
-async def _ask_when_analysed(actor, analysis: EphemeralAnalysis, query: str, model: str | None) -> dict[str, Any]:
-    """Waits a little for the pre-analysis, then starts the question; if it is not over, hands back the analysis."""
+async def _described(actor, analysis: EphemeralAnalysis, detail: str) -> dict[str, Any]:
+    """The state of an analysis with the analysis of its files (`detail`: none, summary or full)."""
+    if detail == "none":
+        return _analysis_json(analysis)
+    async with async_session() as session:
+        results = await _service(session).results(actor, analysis.id)
+    cap = McpSettings().MCP_MAX_PROFILE_BYTES
+    profiles: dict[uuid.UUID, dict] = {}
+    notes = []
+    for file_id, result in results.items():
+        if detail == "full" and len(json.dumps(result)) <= cap:
+            profiles[file_id] = result
+        else:
+            profiles[file_id] = summarize(result)
+            if detail == "full":
+                notes.append(f"The whole analysis of a file is over {cap // 1024} KB: its overview is given instead.")
+    described = _analysis_json(analysis, profiles)
+    if notes:
+        described["note"] = " ".join(dict.fromkeys(notes))
+    return described
+
+
+async def _ask_when_analysed(
+    actor, analysis: EphemeralAnalysis, query: str | None, model: str | None
+) -> dict[str, Any]:
+    """Waits a little for the pre-analysis, then starts the question (or, with no question, gives the analysis of the
+    files); if it is not over, hands back the analysis as it is."""
     analysis = await _wait_until_analysed(analysis.id, actor, McpSettings().MCP_PREANALYSIS_WAIT_SECONDS)
     if analysis.status == "processing":
-        return {**_analysis_json(analysis), "note": "Still being analysed: call `ask` or `get_analysis` later."}
+        return {**_analysis_json(analysis), "note": "Still being analysed: call `get_analysis` or `ask` later."}
+    if not (query or "").strip():
+        return await _described(actor, analysis, "summary")
     async with async_session() as session:
         run = await _service(session).start_run(
             actor, analysis.id, query, model=model, default_model=await get_model_catalog().resolve_default()
@@ -208,12 +246,12 @@ async def _ask_when_analysed(actor, analysis: EphemeralAnalysis, query: str, mod
 @mcp_server.tool()
 async def ask_known_files(
     file_hashes: list[str],
-    query: str,
+    query: str | None = None,
     model: str | None = None,
     ttl_hours: int | None = None,
 ) -> dict[str, Any]:
     """Asks a question about files that were already analysed, named by the sha256 of their content, without
-    sending them again.
+    sending them again. Without a question, it gives the analysis of the files instead (see `analyze_files`).
 
     file_hashes: sha256 (64 hexadecimal characters) of the files, as given in the `sha256` of each file by
     `analyze_files` and `get_analysis` (20 at most). Only files you can read and whose analysis is ready are
@@ -235,7 +273,8 @@ async def ask_known_files(
             "prompt": (
                 "These files are not available as already analysed (never sent, expired or deleted): "
                 f"{', '.join(error.hashes)}. Send the files whose sha256 is one of these with `analyze_files` "
-                f"(base64), together with the same question: {query!r}. Files whose hash is not listed are known."
+                f"(base64){f', together with the same question: {query!r}' if query else ''}. "
+                "Files whose hash is not listed are known."
             ),
         }
     except (NotFoundError, ConflictError, InvalidRequestError, ModelNotAvailableError, ModelProviderError) as error:
@@ -282,13 +321,20 @@ async def get_run(run_id: str) -> dict[str, Any]:
 
 
 @mcp_server.tool()
-async def get_analysis(analysis_id: str) -> dict[str, Any]:
-    """State of the pre-analysis of the files: processing, ready, partial (some files could not be read, see
-    each file's "error") or failed."""
+async def get_analysis(analysis_id: str, detail: str = "summary") -> dict[str, Any]:
+    """State of the pre-analysis of the files (processing, ready, partial: some files could not be read, see each
+    file's "error", or failed) and the analysis of each file that is ready, in `files[].profile`.
+
+    detail: "summary" (default) gives, per sheet, the rows, the columns (type, filled and distinct values, statistics,
+    top values) and the first rows; "full" gives the whole analysis (`analyse.json`, bigger, with every statistic and
+    the typed tables of the sheets); "none" gives only the state, to wait for the pre-analysis cheaply."""
     try:
         actor = actor_of(get_access_token())
+        if detail not in ("none", "summary", "full"):
+            return {"error": "detail must be none, summary or full", "status_code": 422}
         async with async_session() as session:
-            return _analysis_json(await _service(session).get(actor, uuid.UUID(analysis_id)))
+            analysis = await _service(session).get(actor, uuid.UUID(analysis_id))
+        return await _described(actor, analysis, detail)
     except ValueError:
         return {"error": f"{analysis_id!r} is not an analysis id", "status_code": 422}
     except (NotFoundError, ConflictError, InvalidRequestError) as error:
