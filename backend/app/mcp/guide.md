@@ -40,11 +40,11 @@ Chacun ne voit que ses propres analyses.
 
 | Outil | Rôle |
 |---|---|
-| `analyze_files` | envoie les fichiers (en base64) **et** la question en un appel |
-| `ask_known_files` | pose une question sur des fichiers déjà analysés, désignés par leur `sha256`, sans les renvoyer |
+| `analyze_files` | envoie les fichiers (en base64) et la question en un appel ; **sans question**, renvoie seulement l'analyse des fichiers |
+| `ask_known_files` | pose une question (ou, sans question, donne l'analyse) de fichiers déjà analysés, désignés par leur `sha256`, sans les renvoyer |
 | `ask` | autre question sur les mêmes fichiers d'une analyse |
 | `get_run` | statut, puis réponse (texte, graphiques en PNG base64) |
-| `get_analysis` | état de la pré-analyse des fichiers |
+| `get_analysis` | état de la pré-analyse des fichiers et analyse de chacun (`detail` : `summary`, `full` ou `none`) |
 | `delete_analysis` | supprime tout de suite |
 
 ## Déroulé
@@ -60,6 +60,21 @@ Chacun ne voit que ses propres analyses.
 Chaque fichier d'une analyse a un `sha256`. Avec `ask_known_files`, on repose une question sur ces fichiers sans les
 renvoyer ; si l'un d'eux n'est plus connu (expiré, supprimé, jamais envoyé), rien n'est créé et l'erreur liste les
 fichiers à renvoyer avec `analyze_files`.
+
+## Avoir seulement l'analyse des fichiers
+
+Pour connaître la structure de fichiers (feuilles, colonnes, types, statistiques) sans poser de question, appelez
+`analyze_files` **sans `query`** (ou `ask_known_files` avec des hashes, ou `get_analysis` pour une analyse existante).
+Aucune question n'est lancée, donc aucun modèle n'est utilisé. L'analyse de chaque fichier est dans `files[].profile` :
+
+- pour chaque feuille : son nom, son nombre de lignes, si un en-tête a été reconnu et ses 3 premières lignes ;
+- pour chaque colonne : le `type` (`integer`, `number`, `text`, `date`, …), les cellules renseignées (`non_null`) et
+  vides (`null`), le nombre de valeurs distinctes, des exemples, les valeurs les plus fréquentes, et selon le type les
+  statistiques (`numeric` : min, max, moyenne, médiane, somme ; `dates` : min, max).
+
+`get_analysis(analysis_id, detail="full")` renvoie l'`analyse.json` complet (toutes les statistiques) tant qu'il tient
+dans 1 Mio, sinon l'aperçu ci-dessus avec une note. `detail="none"` ne renvoie que l'état, pour attendre la
+pré-analyse sans rien lire.
 
 ## Modèle
 

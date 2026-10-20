@@ -158,6 +158,20 @@ class EphemeralService:
             status = "failed"
         return EphemeralAnalysis(id=collection.id, status=status, expires_at=collection.expires_at, files=views)
 
+    async def results(self, actor: Actor, analysis_id: uuid.UUID) -> dict[uuid.UUID, dict]:
+        """The analysis itself (`analyse.json`: sheets, columns, statistics) of each file whose pre-analysis is ready,
+        by file id."""
+        collection = await self._owned(actor, analysis_id)
+        files = await self.files.files.list_by_collection(collection.id)
+        latest = await self.analyses.latest_by_file([file.id for file in files])
+        results = {}
+        for file in files:
+            analysis = latest.get(file.id)
+            result = await self.analyses.read_result(analysis) if analysis else None
+            if result is not None:
+                results[file.id] = result
+        return results
+
     async def start_run(
         self,
         actor: Actor,

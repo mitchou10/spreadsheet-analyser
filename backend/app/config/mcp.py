@@ -12,4 +12,8 @@ class McpSettings(BaseSettings):
     # A chart is returned in the answer when its image is at most this big (otherwise only its URL).
     MCP_MAX_CHART_BYTES: int = 2 * 1024 * 1024
 
+    # `get_analysis(detail="full")` returns the whole analysis of a file when it is at most this big (otherwise its
+    # overview, with a note): the statistics of a wide spreadsheet can be large.
+    MCP_MAX_PROFILE_BYTES: int = 1024 * 1024
+
     model_config = SettingsConfigDict(case_sensitive=True, env_file=(".env", ".env.local"), extra="ignore")

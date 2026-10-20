@@ -46,11 +46,11 @@ claude mcp add --transport http spreadsheet-analyser https://<hôte>/mcp --heade
 
 | Outil | Rôle |
 |---|---|
-| `analyze_files(files, query, model?, ttl_hours?)` | envoie les fichiers **et** la question en un appel |
-| `ask_known_files(file_hashes, query, model?, ttl_hours?)` | pose une question sur des fichiers **déjà analysés**, désignés par leur sha256, sans les renvoyer |
+| `analyze_files(files, query?, model?, ttl_hours?)` | envoie les fichiers et la question en un appel ; sans `query`, renvoie l'analyse des fichiers |
+| `ask_known_files(file_hashes, query?, model?, ttl_hours?)` | pose une question sur des fichiers **déjà analysés**, désignés par leur sha256, sans les renvoyer |
 | `ask(analysis_id, query, model?)` | autre question sur les mêmes fichiers (ou première question si l'analyse n'était pas prête) |
 | `get_run(run_id)` | statut puis réponse : texte (markdown), graphiques, trace |
-| `get_analysis(analysis_id)` | état de la pré-analyse des fichiers |
+| `get_analysis(analysis_id, detail?)` | état de la pré-analyse des fichiers et analyse de chacun (`summary` par défaut, `full`, `none`) |
 | `delete_analysis(analysis_id)` | supprime tout de suite |
 
 `files` est une liste de `{"name": "ventes.xlsx", "content_base64": "<fichier en base64>", "mimetype": "<facultatif>"}`
@@ -90,6 +90,16 @@ une question sur les mêmes fichiers dans une autre analyse, sans les renvoyer :
 Les erreurs que le modèle peut corriger (fichier d'un type non accepté, base64 invalide, modèle inconnu, analyse
 introuvable, run déjà en cours) sont renvoyées dans le résultat : `{"error": "…", "status_code": 422}`.
 
+## L'analyse seule
+
+Sans `query`, `analyze_files` et `ask_known_files` ne lancent aucune question (donc aucun modèle) : ils attendent la
+pré-analyse (`MCP_PREANALYSIS_WAIT_SECONDS`) et renvoient, dans `files[].profile`, l'aperçu de l'analyse de chaque
+fichier, calculé depuis son `analyse.json` ([format](analyse-json.md)) : par feuille le nom, les lignes, l'en-tête et les
+3 premières lignes ; par colonne le type, les cellules renseignées et vides, les valeurs distinctes, des exemples, les
+5 valeurs les plus fréquentes et les statistiques numériques ou de dates. `get_analysis` donne la même chose pour une
+analyse existante, avec `detail="full"` pour l'`analyse.json` complet tant qu'il fait au plus `MCP_MAX_PROFILE_BYTES`
+(1 Mio), sinon l'aperçu et une note.
+
 ## Modèle
 
 `model` est facultatif dans `analyze_files`, `ask_known_files` et `ask`. Omis, le serveur prend le premier modèle de
@@ -111,6 +121,7 @@ pas d'outil MCP pour lister les modèles : sans connaître les identifiants, ne 
 | `MCP_PREANALYSIS_WAIT_SECONDS` | `30` | attente de `analyze_files` avant de rendre la main |
 | `MCP_MAX_UPLOAD_BYTES` | 10 Mio | taille totale des fichiers d'un appel |
 | `MCP_MAX_CHART_BYTES` | 2 Mio | taille maximale d'un graphique renvoyé en base64 |
+| `MCP_MAX_PROFILE_BYTES` | 1 Mio | taille maximale d'une analyse renvoyée en entier par `get_analysis(detail="full")` |
 
 ## Déploiement
 
