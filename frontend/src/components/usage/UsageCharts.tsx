@@ -2,8 +2,12 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Usage, UsageSums } from '@/types/usage'
+import { WaterBottles } from './WaterBottles'
 
-const PERIODS = [7, 30, 90] as const
+// 365 days is the longest period the API gives.
+const PERIODS = [7, 30, 90, 365] as const
+
+const periodLabel = (days: number) => (days === 365 ? 'sur 1 an' : `sur ${days} jours`)
 
 // The agent graph nodes that call the model (agent-worker/app/agent/graph.py).
 const NODE_LABELS: Record<string, string> = { plan: 'Plan', agent: 'Réponse / choix d’outil' }
@@ -17,7 +21,7 @@ export function PeriodSelector({ days, onChange }: { days: number; onChange: (da
     <div className="flex gap-1" role="group" aria-label="Période">
       {PERIODS.map((period) => (
         <Button key={period} size="sm" variant={days === period ? 'default' : 'outline'} onClick={() => onChange(period)}>
-          {period} jours
+          {period === 365 ? '1 an' : `${period} jours`}
         </Button>
       ))}
     </div>
@@ -206,6 +210,7 @@ export function UsageCharts({
         <Stat label="Sortie (réponse)" value={usage.totals.outputTokens} />
         <Stat label="Appels au modèle" value={usage.totals.calls} />
       </div>
+      <WaterBottles key={usage.totals.totalTokens} totalTokens={usage.totals.totalTokens} period={periodLabel(usage.days)} />
       <Legend />
       <Panel title="Tokens par jour">
         <DailyChart usage={usage} />
