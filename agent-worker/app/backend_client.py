@@ -88,6 +88,10 @@ class BackendClient:
         body = {"content": content, **({"trace": trace} if trace else {})}
         return self._request("POST", f"/runs/{run_id}/complete", body)
 
+    def record_usage(self, run_id: str, calls: list[dict]) -> None:
+        """Tokens the run's LLM calls consumed, sent whatever the run's outcome (a later report replaces this one)."""
+        self._request("POST", f"/runs/{run_id}/usage", {"calls": calls})
+
     def fail(self, run_id: str, error: str) -> dict:
         return self._request("POST", f"/runs/{run_id}/fail", {"error": error})
 

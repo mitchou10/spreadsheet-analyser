@@ -296,6 +296,93 @@ def test_the_answer_is_sent_with_a_trace_of_the_plan_the_files_and_the_tool_call
     assert json.loads(trace["steps"][1]["output"])["name"] == "Montant_HT"
 
 
+def spent(text: str, input_tokens: int, output_tokens: int) -> AIMessage:
+    usage = {"input_tokens": input_tokens, "output_tokens": output_tokens, "total_tokens": input_tokens + output_tokens}
+    return AIMessage(content=text, usage_metadata=usage)
+
+
+def test_the_usage_is_reported_to_the_run_before_the_answer_is_stored() -> None:
+    calls: list = []
+
+    assert run(make_client(calls), FakeLLM(spent("Plan", 10, 1), spent("Réponse", 20, 2))) == "completed"
+
+    assert paths(calls)[-2:] == ["/runs/r1/usage", "/runs/r1/complete"]
+    reported = json.loads(calls[-2][2])["calls"]
+    assert [(c["node"], c["total_tokens"]) for c in reported] == [("plan", 11), ("agent", 22)]
+
+
+def test_the_tokens_of_a_run_that_fails_are_reported_too() -> None:
+    calls: list = []
+
+    # The plan is paid for, then the model answers nothing: the run fails but the plan's tokens were spent.
+    assert run(make_client(calls), FakeLLM(spent("Plan", 10, 1), spent("  ", 20, 0))) == "failed"
+
+    assert paths(calls)[-2:] == ["/runs/r1/usage", "/runs/r1/fail"]
+    assert [(c["node"], c["total_tokens"]) for c in json.loads(calls[-2][2])["calls"]] == [("plan", 11), ("agent", 20)]
+
+
+def test_the_tokens_of_a_cancelled_run_are_reported_too() -> None:
+    calls: list = []
+
+    assert run(make_client(calls, complete_status=409), FakeLLM(spent("Plan", 10, 1), spent("R", 20, 2))) == "cancelled"
+
+    assert "/runs/r1/usage" in paths(calls)
+
+
+def test_a_failed_report_does_not_fail_the_run() -> None:
+    calls: list = []
+    client = make_client(calls)
+
+    def broken(run_id, calls):
+        raise RuntimeError("backend down")
+
+    client.record_usage = broken
+
+    assert run(client, FakeLLM(spent("Plan", 10, 1), spent("R", 20, 2))) == "completed"
+
+
+def test_nothing_is_reported_when_the_provider_gives_no_usage() -> None:
+    calls: list = []
+
+    assert run(make_client(calls), FakeLLM("Plan", "Réponse")) == "completed"
+
+    assert "/runs/r1/usage" not in paths(calls)
+
+
+def test_the_trace_carries_the_tokens_of_each_llm_call_and_their_total() -> None:
+    calls: list = []
+
+    def usage(i: int, o: int) -> dict:
+        return {"input_tokens": i, "output_tokens": o, "total_tokens": i + o}
+
+    plan = AIMessage(content="1. Chercher", usage_metadata=usage(100, 10))
+    step = AIMessage(
+        content="", tool_calls=[{"name": "search", "args": {"query": "x"}, "id": "c1"}], usage_metadata=usage(200, 20)
+    )
+    final = AIMessage(content="Réponse.", usage_metadata=usage(300, 30))
+
+    assert run(make_client(calls), FakeLLM(plan, step, final)) == "completed"
+
+    assert last_body(calls)["trace"]["usage"] == {
+        "input_tokens": 600,
+        "output_tokens": 60,
+        "total_tokens": 660,
+        "calls": [
+            {"node": "plan", "input_tokens": 100, "output_tokens": 10, "total_tokens": 110},
+            {"node": "agent", "input_tokens": 200, "output_tokens": 20, "total_tokens": 220},
+            {"node": "agent", "input_tokens": 300, "output_tokens": 30, "total_tokens": 330},
+        ],
+    }
+
+
+def test_no_usage_is_sent_when_the_provider_reports_none() -> None:
+    calls: list = []
+
+    assert run(make_client(calls), FakeLLM("Plan", "Réponse.")) == "completed"
+
+    assert "usage" not in last_body(calls)["trace"]
+
+
 def test_a_very_long_tool_output_is_cut_in_the_trace_but_not_for_the_model(monkeypatch) -> None:
     from app.agent import graph
 
