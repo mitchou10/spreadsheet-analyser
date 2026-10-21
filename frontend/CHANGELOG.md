@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.10.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.9.0...v0.10.0) (2026-10-21)
+
+
+### Features
+
+* **agent:** report the tokens of each llm call, even when the run fails ([aa5426c](https://github.com/mitchou10/spreadsheet-analyser/commit/aa5426c56a22fa047d4241627a4212b048a755cc))
+* **backend:** store the token usage of each run per node and expose it ([13f8e6d](https://github.com/mitchou10/spreadsheet-analyser/commit/13f8e6d7061fc57ed355bd89ac9ceb21c807cafb))
+* **frontend:** add a consumption page and the admin consumption charts ([d25cf42](https://github.com/mitchou10/spreadsheet-analyser/commit/d25cf42e14a7be2cd8b18969541adf2b3a8fa5b3))
+* **frontend:** show the tokens of each call under an answer ([85f1779](https://github.com/mitchou10/spreadsheet-analyser/commit/85f1779dad5b670c1d4efb24a1326182802bbc2a))
+* **mcp:** give the analysis of the files without a question ([d611223](https://github.com/mitchou10/spreadsheet-analyser/commit/d611223d30763d797cb8f6be6e8b72b10b40dc21))
+
 ## [0.9.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.8.0...v0.9.0) (2026-10-19)
 
 
