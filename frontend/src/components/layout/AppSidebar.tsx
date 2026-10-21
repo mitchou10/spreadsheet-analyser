@@ -28,7 +28,7 @@ import { useCurrentUser } from '@/auth/AuthContext'
 import { useAppVersion } from '@/hooks/useAppVersion'
 import { AboutDialog } from './AboutDialog'
 import type { Conversation } from '@/types/conversation'
-import { FileSpreadsheet, LogOut, Shield, SquarePen, Trash2 } from 'lucide-react'
+import { ChartColumn, FileSpreadsheet, LogOut, Shield, SquarePen, Trash2 } from 'lucide-react'
 
 interface AppSidebarProps {
   conversations: Conversation[]
@@ -40,6 +40,8 @@ interface AppSidebarProps {
   onShowCollections: () => void
   isAdminActive: boolean
   onShowAdmin: () => void
+  isUsageActive: boolean
+  onShowUsage: () => void
 }
 
 export function AppSidebar({
@@ -52,6 +54,8 @@ export function AppSidebar({
   onShowCollections,
   isAdminActive,
   onShowAdmin,
+  isUsageActive,
+  onShowUsage,
 }: AppSidebarProps) {
   const { user, logout } = useCurrentUser()
   const version = useAppVersion()
@@ -100,7 +104,7 @@ export function AppSidebar({
               {conversations.map((conversation) => (
                 <SidebarMenuItem key={conversation.id}>
                   <SidebarMenuButton
-                    isActive={!isCollectionsActive && !isAdminActive && conversation.id === activeId}
+                    isActive={!isCollectionsActive && !isAdminActive && !isUsageActive && conversation.id === activeId}
                     onClick={() => onSelect(conversation.id)}
                   >
                     <span className="truncate">{conversation.title}</span>
@@ -122,6 +126,12 @@ export function AppSidebar({
       <SidebarFooter>
         {user && (
           <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={isUsageActive} onClick={onShowUsage}>
+                <ChartColumn className="size-4" />
+                <span className="truncate">Ma consommation</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={() => logout()}>
                 <LogOut className="size-4" />

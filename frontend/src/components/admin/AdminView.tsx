@@ -6,9 +6,11 @@ import { Input } from '@/components/ui/input'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { useAdminAccess } from '@/hooks/useAdminAccess'
 import type { AdminCollection, Person } from '@/types/admin'
+import { useUsage } from '@/hooks/useUsage'
+import { PeriodSelector, UsageCharts } from '@/components/usage/UsageCharts'
 import { Crown, Eye, FileSpreadsheet, Plus, Shield, X } from 'lucide-react'
 
-type Mode = 'collections' | 'people'
+type Mode = 'collections' | 'people' | 'usage'
 
 function GrantForm({ onGrant }: { onGrant: (email: string) => Promise<boolean> }) {
   const [email, setEmail] = useState('')
@@ -150,6 +152,50 @@ function PeopleTable({
   )
 }
 
+/** Everyone's token consumption; picking a person narrows the charts to them. */
+function AdminUsage() {
+  const [days, setDays] = useState(30)
+  const [userId, setUserId] = useState<string | null>(null)
+  const everyone = useUsage(days, true)
+  const focus = useUsage(days, true, userId)
+  // The per-person split always lists everybody; the rest of the charts follow the selected person.
+  const shown = userId ? focus.usage : everyone.usage
+  const error = everyone.error ?? focus.error
+  const selected = everyone.usage?.byUser.find((u) => u.userId === userId)
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-muted-foreground">
+          {userId ? (
+            <>
+              Consommation de <span className="font-medium text-foreground">{selected?.email ?? userId}</span> ·{' '}
+              <button type="button" className="underline" onClick={() => setUserId(null)}>
+                voir tout le monde
+              </button>
+            </>
+          ) : (
+            'Consommation de tous les utilisateurs. Cliquez sur une personne pour voir son détail.'
+          )}
+        </p>
+        <PeriodSelector days={days} onChange={setDays} />
+      </div>
+      {error && (
+        <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      {!shown && !error && <p className="text-sm text-muted-foreground">Chargement…</p>}
+      {shown && everyone.usage && shown.totals.calls === 0 && everyone.usage.totals.calls === 0 && (
+        <p className="py-12 text-center text-muted-foreground">Aucune consommation sur les {days} derniers jours.</p>
+      )}
+      {shown && everyone.usage && everyone.usage.totals.calls > 0 && (
+        <UsageCharts usage={{ ...shown, byUser: everyone.usage.byUser }} onSelectUser={setUserId} selectedUser={userId} />
+      )}
+    </div>
+  )
+}
+
 export function AdminView() {
   const admin = useAdminAccess()
   const [mode, setMode] = useState<Mode>('collections')
@@ -160,7 +206,7 @@ export function AdminView() {
         <div className="flex items-center gap-2">
           <SidebarTrigger />
           <Shield className="size-4 text-muted-foreground" aria-hidden />
-          <span className="text-sm font-medium">Administration · accès</span>
+          <span className="text-sm font-medium">Administration · {mode === 'usage' ? 'consommation' : 'accès'}</span>
         </div>
         <div className="flex gap-1" role="group" aria-label="Affichage">
           <Button size="sm" variant={mode === 'collections' ? 'default' : 'outline'} onClick={() => setMode('collections')}>
@@ -168,6 +214,9 @@ export function AdminView() {
           </Button>
           <Button size="sm" variant={mode === 'people' ? 'default' : 'outline'} onClick={() => setMode('people')}>
             Par personne
+          </Button>
+          <Button size="sm" variant={mode === 'usage' ? 'default' : 'outline'} onClick={() => setMode('usage')}>
+            Consommation
           </Button>
         </div>
       </div>
@@ -178,10 +227,11 @@ export function AdminView() {
             {admin.error}
           </p>
         )}
-        {!admin.isLoading && admin.collections.length === 0 && !admin.error && (
+        {mode === 'usage' && <AdminUsage />}
+        {mode !== 'usage' && !admin.isLoading && admin.collections.length === 0 && !admin.error && (
           <p className="py-12 text-center text-muted-foreground">Aucune collection pour le moment.</p>
         )}
-        {mode === 'collections' ? (
+        {mode === 'usage' ? null : mode === 'collections' ? (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             {admin.collections.map((collection) => (
               <CollectionCard key={collection.id} collection={collection} onGrant={admin.grant} onRevoke={admin.revoke} />
