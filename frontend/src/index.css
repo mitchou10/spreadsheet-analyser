@@ -155,3 +155,16 @@ body {
     @apply font-sans;
   }
 }
+
+/* Water surface of the consumption bottles: a wave twice as wide as the bottle, slid by one wave length in a loop. */
+@keyframes water-wave {
+  to {
+    transform: translateX(-40px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .water-wave {
+    animation: none;
+  }
+}
