@@ -30,6 +30,7 @@ Who has access to what (administrators only).
 | GET | `/api/admin/collections` | Every collection with its owner and who it is shared with | administrateur |
 | GET | `/api/admin/people` | Every person (by email) with the collections they own or can read | administrateur |
 | GET | `/api/admin/feedback` | Thumbs up/down given to the answers, latest first, with the exchange they are about | administrateur |
+| GET | `/api/admin/usage` | Tokens consumed by everyone (or one person), per node, day, model and person | administrateur |
 | POST | `/api/admin/collections/{collection_id}/access` | Give an email read access to any collection | administrateur |
 | DELETE | `/api/admin/collections/{collection_id}/access/{email}` | Remove an email's read access to a collection | administrateur |
 | POST | `/api/admin/collections/{collection_id}/search-index` | Rebuild a collection's saved search index from its analyses (backfill or repair) | administrateur |
@@ -161,6 +162,7 @@ Guides in markdown (how to connect an agent over MCP).
 | GET | `/api/internal/runs/{run_id}/account` | Everything the requester can read: collections, files, states | jeton interne |
 | POST | `/api/internal/runs/{run_id}/start` | queued -> running (409 if cancelled meanwhile) | jeton interne |
 | POST | `/api/internal/runs/{run_id}/complete` | Store the assistant reply, running -> completed | jeton interne |
+| POST | `/api/internal/runs/{run_id}/usage` | Tokens consumed by the run's LLM calls, whatever the run's final status | jeton interne |
 | POST | `/api/internal/runs/{run_id}/fail` | Mark the run failed | jeton interne |
 | GET | `/api/internal/conversations/{conversation_id}/messages` | Full history of a conversation, oldest first | jeton interne |
 | GET | `/api/internal/analyses/{analysis_id}/context` | Where to read the file and write analyse.json | jeton interne |
@@ -170,6 +172,12 @@ Guides in markdown (how to connect an agent over MCP).
 | GET | `/api/internal/collections/{collection_id}/analyses` | Files of a collection with a ready analysis (search index input) | jeton interne |
 | GET | `/api/internal/collections/{collection_id}/audience` | Who can read a collection (owner and shares) | jeton interne |
 | GET | `/api/internal/users/collections` | Collections a person can read, by email (user index input) | jeton interne |
+
+## Usage
+
+| Méthode | Route | Description | Accès |
+|---|---|---|---|
+| GET | `/api/usage/me` | Tokens my questions consumed, in total and per graph node, day and model | connecté |
 
 ## Hors OpenAPI
 
