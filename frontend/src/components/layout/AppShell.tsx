@@ -10,6 +10,7 @@ import { AdminView } from '../admin/AdminView'
 import { ChatView } from '../chat/ChatView'
 import { CollectionDetailView } from '../collections/CollectionDetailView'
 import { CollectionsListView } from '../collections/CollectionsListView'
+import { UsageView } from '../usage/UsageView'
 import { AppHeader } from './AppHeader'
 import { AppSidebar } from './AppSidebar'
 
@@ -88,6 +89,8 @@ export function AppShell() {
           onShowCollections={() => navigate('/collections')}
           isAdminActive={pathname.startsWith('/admin')}
           onShowAdmin={() => navigate('/admin')}
+          isUsageActive={pathname.startsWith('/usage')}
+          onShowUsage={() => navigate('/usage')}
         />
         <SidebarInset className="min-h-0 overflow-hidden">
           {error && (
@@ -160,6 +163,7 @@ export function AppShell() {
                 )
               }
             />
+            <Route path="/usage" element={<UsageView />} />
             <Route path="/admin" element={user?.isAdmin ? <AdminView /> : <Forbidden />} />
             <Route path="*" element={<Navigate to="/chat" replace />} />
           </Routes>
