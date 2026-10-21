@@ -5,6 +5,15 @@ export interface MessageTrace {
   plan: string
   files: { id: string; name: string; collection: string }[]
   steps: { tool: string; arguments: Record<string, unknown>; output: string }[]
+  // Tokens per LLM call (graph node) and in total; absent when the provider reported none.
+  usage?: TokenUsage | null
+}
+
+export interface TokenUsage {
+  input_tokens: number
+  output_tokens: number
+  total_tokens: number
+  calls: { node: string; input_tokens: number; output_tokens: number; total_tokens: number }[]
 }
 
 export type FeedbackRating = 'up' | 'down'

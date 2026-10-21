@@ -18,6 +18,12 @@ const TOOL_LABELS: Record<string, string> = {
   account_files: 'Fichiers du compte',
 }
 
+// The graph nodes that call the model (agent-worker/app/agent/graph.py).
+const NODE_LABELS: Record<string, string> = { plan: 'Plan', agent: 'Réponse / choix d’outil' }
+
+const nodeLabel = (node: string) => NODE_LABELS[node] ?? node
+const tokens = (count: number) => count.toLocaleString('fr-FR')
+
 const toolLabel = (tool: string) => TOOL_LABELS[tool] ?? tool
 
 /** A fenced code block that its own content cannot close early (a longer fence than any run of backticks inside). */
@@ -136,7 +142,7 @@ const argumentsLine = (args: Record<string, unknown>) =>
 /** Under an assistant answer: what it was given (files) and how it got there (plan, tool calls). */
 export function MessageSources({ trace }: { trace: MessageTrace }) {
   const calls = trace.steps.length
-  if (calls === 0 && trace.files.length === 0 && !trace.plan) return null
+  if (calls === 0 && trace.files.length === 0 && !trace.plan && !trace.usage) return null
 
   return (
     <details className="group w-full text-xs text-muted-foreground">
@@ -166,6 +172,40 @@ export function MessageSources({ trace }: { trace: MessageTrace }) {
                 <ScopeChip key={file.id} kind="file" label={file.name} origin={file.collection || undefined} />
               ))}
             </ul>
+          </section>
+        )}
+
+        {trace.usage && (
+          <section>
+            <h4 className="mb-1 text-xs font-medium text-muted-foreground">Consommation de tokens</h4>
+            <table className="w-full border-collapse text-[11px]">
+              <thead>
+                <tr className="text-muted-foreground">
+                  <th className="py-1 text-left font-medium">Appel</th>
+                  <th className="py-1 text-right font-medium">Entrée</th>
+                  <th className="py-1 text-right font-medium">Sortie</th>
+                  <th className="py-1 text-right font-medium">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trace.usage.calls.map((call, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="py-1">{nodeLabel(call.node)}</td>
+                    <td className="py-1 text-right tabular-nums">{tokens(call.input_tokens)}</td>
+                    <td className="py-1 text-right tabular-nums">{tokens(call.output_tokens)}</td>
+                    <td className="py-1 text-right tabular-nums">{tokens(call.total_tokens)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t font-medium">
+                  <td className="py-1">Total</td>
+                  <td className="py-1 text-right tabular-nums">{tokens(trace.usage.input_tokens)}</td>
+                  <td className="py-1 text-right tabular-nums">{tokens(trace.usage.output_tokens)}</td>
+                  <td className="py-1 text-right tabular-nums">{tokens(trace.usage.total_tokens)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </section>
         )}
 
