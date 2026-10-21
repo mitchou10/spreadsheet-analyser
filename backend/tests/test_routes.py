@@ -301,6 +301,12 @@ async def test_the_agents_trace_is_stored_with_the_answer_and_listed_with_the_me
         "plan": "Chercher la colonne prix",
         "files": [{"file_id": "f1", "file_name": "ventes.csv", "collection_name": "Ventes"}],
         "steps": [{"tool": "search", "arguments": {"query": "prix"}, "output": '{"columns": []}'}],
+        "usage": {
+            "input_tokens": 12,
+            "output_tokens": 3,
+            "total_tokens": 15,
+            "calls": [{"node": "plan", "input_tokens": 12, "output_tokens": 3, "total_tokens": 15}],
+        },
     }
 
     done = await client.post(
@@ -311,6 +317,21 @@ async def test_the_agents_trace_is_stored_with_the_answer_and_listed_with_the_me
     messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
     assert messages[0]["trace"] is None  # the user's message has none
     assert messages[1]["trace"] == trace
+
+
+async def test_a_trace_without_usage_is_listed_with_no_usage(client, monkeypatch) -> None:
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "secret")
+    worker = {"Authorization": "Bearer secret"}
+    conversation = (await client.post("/api/conversations", json={})).json()
+    run = (await _send(client, conversation["id"])).json()["run"]
+    await client.post(f"/api/internal/runs/{run['id']}/start", headers=worker)
+
+    await client.post(
+        f"/api/internal/runs/{run['id']}/complete", json={"content": "42", "trace": {"plan": "p"}}, headers=worker
+    )
+
+    messages = (await client.get(f"/api/conversations/{conversation['id']}/messages")).json()["items"]
+    assert messages[1]["trace"]["usage"] is None
 
 
 async def test_a_trace_that_is_too_large_is_refused(client, monkeypatch) -> None:
