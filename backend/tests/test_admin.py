@@ -12,6 +12,7 @@ from app.services import (
     AdminService,
     CollectionService,
     ConflictError,
+    ConversationService,
     FileService,
     NotFoundError,
     RunService,
@@ -144,6 +145,7 @@ async def test_admin_routes_are_forbidden_to_non_admins(api) -> None:
     assert (await api.get("/api/admin/collections")).status_code == 403
     assert (await api.get("/api/admin/people")).status_code == 403
     assert (await api.get("/api/admin/feedback")).status_code == 403
+    assert (await api.get("/api/admin/usage")).status_code == 403
     assert (await api.post(f"/api/admin/collections/{some_id}/access", json={"email": "a@b.c"})).status_code == 403
     assert (await api.delete(f"/api/admin/collections/{some_id}/access/a@b.c")).status_code == 403
 
@@ -252,3 +254,24 @@ async def test_admin_reads_the_feedback_with_the_exchange(api, session, dispatch
     )
     assert (await api.get("/api/admin/feedback", params={"rating": "up"})).json() == []
     assert (await api.get("/api/admin/feedback", params={"limit": 0})).status_code == 422
+
+
+async def test_usage_routes_serve_my_figures_and_the_administrators_everyones(
+    api, session, dispatcher, storage
+) -> None:
+    conversation = await ConversationService(session).create(Actor(user_id="dev-user", email="dev@example.com"))
+    runs = RunService(session, dispatcher, storage)
+    _, run = await runs.send_message(Actor(user_id="dev-user", email="dev@example.com"), conversation.id, "Q")
+    await runs.start(run.id)
+    await runs.record_usage(run.id, [{"node": "plan", "input_tokens": 7, "output_tokens": 3, "total_tokens": 10}])
+
+    login_as(admin=False)
+    mine = (await api.get("/api/usage/me")).json()
+    assert mine["totals"]["total_tokens"] == 10
+    assert mine["by_node"][0]["node"] == "plan"
+    assert mine["by_user"] == []
+
+    login_as(admin=True, user_id="root", email="root@example.com")
+    everyone = (await api.get("/api/admin/usage?days=7")).json()
+    assert everyone["by_user"][0]["user_id"] == "dev-user"
+    assert (await api.get("/api/admin/usage?days=0")).status_code == 422

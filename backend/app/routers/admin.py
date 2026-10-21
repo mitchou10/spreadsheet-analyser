@@ -3,7 +3,14 @@ from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies import AdminDep, AdminServiceDep, AnalysisServiceDep, FeedbackServiceDep, get_admin
+from app.dependencies import (
+    AdminDep,
+    AdminServiceDep,
+    AnalysisServiceDep,
+    FeedbackServiceDep,
+    UsageServiceDep,
+    get_admin,
+)
 from app.models import FeedbackRating
 from app.schemas import (
     AccessCreate,
@@ -11,6 +18,7 @@ from app.schemas import (
     AdminCollectionOut,
     AdminPersonOut,
     FeedbackReviewOut,
+    UsageOut,
     UserIndexRebuildIn,
 )
 
@@ -36,6 +44,11 @@ async def list_feedback(
     offset: int = Query(0, ge=0),
 ) -> list[FeedbackReviewOut]:
     return [FeedbackReviewOut(**asdict(item)) for item in await service.review(rating, limit, offset)]
+
+
+@router.get("/usage", summary="Tokens consumed by everyone (or one person), per node, day, model and person")
+async def usage(service: UsageServiceDep, days: int = Query(30, ge=1, le=365), user_id: str | None = None) -> UsageOut:
+    return UsageOut.model_validate(asdict(await service.overall(days, user_id)))
 
 
 @router.post(

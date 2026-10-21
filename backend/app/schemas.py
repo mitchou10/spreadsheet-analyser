@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -121,12 +121,29 @@ class TraceFile(BaseModel):
     collection_name: str = Field(default="", max_length=255)
 
 
+class TokenUsageCall(BaseModel):
+    """Tokens consumed by one LLM call, i.e. one graph node execution."""
+
+    node: str = Field(max_length=100)
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    total_tokens: int = Field(ge=0)
+
+
+class TokenUsage(BaseModel):
+    input_tokens: int = Field(ge=0)
+    output_tokens: int = Field(ge=0)
+    total_tokens: int = Field(ge=0)
+    calls: list[TokenUsageCall] = Field(default=[], max_length=100)
+
+
 class RunTrace(BaseModel):
     """What the agent worked from to produce an answer: its plan, the files in scope and its tool calls."""
 
     plan: str = Field(default="", max_length=8000)
     files: list[TraceFile] = Field(default=[], max_length=200)
     steps: list[TraceStep] = Field(default=[], max_length=50)
+    usage: TokenUsage | None = None
 
 
 class MessageSourceCollection(BaseModel):
@@ -217,6 +234,12 @@ class RunContextOut(BaseModel):
 class RunCompleteIn(BaseModel):
     content: str = Field(min_length=1)
     trace: RunTrace | None = None
+
+
+class RunUsageIn(BaseModel):
+    """What the run's LLM calls consumed so far, sent even when the run fails or is cancelled."""
+
+    calls: list[TokenUsageCall] = Field(default=[], max_length=100)
 
 
 class RunFailIn(BaseModel):
@@ -573,3 +596,39 @@ class UserIndexRebuildIn(BaseModel):
         if "@" not in value[1:-1]:
             raise ValueError("invalid email")
         return value
+
+
+class UsageSumsOut(BaseModel):
+    input_tokens: int
+    output_tokens: int
+    total_tokens: int
+    calls: int
+
+
+class NodeUsageOut(UsageSumsOut):
+    node: str
+
+
+class DayUsageOut(UsageSumsOut):
+    day: date
+
+
+class ModelUsageOut(UsageSumsOut):
+    model: str | None
+
+
+class UserUsageOut(UsageSumsOut):
+    user_id: str
+    email: str | None
+
+
+class UsageOut(BaseModel):
+    """Tokens consumed over the last `days` days: in total, per graph node, per day, per model and (administrators)
+    per person."""
+
+    days: int
+    totals: UsageSumsOut
+    by_node: list[NodeUsageOut]
+    by_day: list[DayUsageOut]
+    by_model: list[ModelUsageOut]
+    by_user: list[UserUsageOut]

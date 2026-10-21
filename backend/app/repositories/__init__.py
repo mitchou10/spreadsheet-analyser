@@ -8,6 +8,7 @@ from app.repositories.file import FileRepository
 from app.repositories.message import MessageRepository
 from app.repositories.run import RunRepository
 from app.repositories.sql_query import SqlQueryRepository
+from app.repositories.token_usage import TokenUsageRepository
 
 __all__ = [
     "AccessCollectionRepository",
@@ -20,4 +21,5 @@ __all__ = [
     "MessageRepository",
     "RunRepository",
     "SqlQueryRepository",
+    "TokenUsageRepository",
 ]

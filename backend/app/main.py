@@ -28,6 +28,7 @@ from app.routers.models import router as models_router
 from app.routers.queries import internal_router as queries_internal_router
 from app.routers.runs import internal_router
 from app.routers.runs import router as runs_router
+from app.routers.usage import router as usage_router
 from app.services import ConflictError, EphemeralService, ForbiddenError, InvalidRequestError, NotFoundError
 from app.version import app_version
 
@@ -123,6 +124,7 @@ app.include_router(conversations_router, prefix="/api")
 app.include_router(ephemeral_router, prefix="/api")
 app.include_router(ephemeral_internal_router, prefix="/api")
 app.include_router(models_router, prefix="/api")
+app.include_router(usage_router, prefix="/api")
 app.include_router(runs_router, prefix="/api")
 app.include_router(internal_router, prefix="/api")
 app.include_router(queries_internal_router, prefix="/api")

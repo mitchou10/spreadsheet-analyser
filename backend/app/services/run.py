@@ -23,6 +23,7 @@ from app.services.conversation import ConversationService
 from app.services.dispatcher import RunDispatcher
 from app.services.errors import ConflictError, NotFoundError
 from app.services.storage import StorageService, message_prefix
+from app.services.usage import UsageService
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,14 @@ class RunService:
         )
         run.result_message_id = reply.id
         return await self._finish(run, RunStatus.COMPLETED)
+
+    async def record_usage(self, run_id: uuid.UUID, calls: list[dict]) -> None:
+        """Stores the tokens the run's LLM calls consumed, whatever became of the run (completed, failed or
+        cancelled: the tokens were spent anyway). Reporting again replaces the previous report."""
+        run = await self._require(run_id)
+        conversation = await self.conversations.conversations.get(run.conversation_id)
+        await UsageService(self.session).record(run.id, conversation.user_id, run.requester_email, run.model, calls)
+        await self.session.commit()
 
     async def fail(self, run_id: uuid.UUID, error: str) -> Run:
         run = await self._require(run_id)
