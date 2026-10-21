@@ -35,6 +35,8 @@ class AgentState(TypedDict, total=False):
     # What the user can look at afterwards: the files in scope and every tool call with its (cut) output.
     files: list[dict]
     trace_steps: Annotated[list[dict], operator.add]
+    # One entry per LLM call that reported its usage: {"node", "input_tokens", "output_tokens", "total_tokens"}.
+    token_usage: Annotated[list[dict], operator.add]
 
 
 def _text(message: BaseMessage) -> str:
@@ -45,6 +47,22 @@ def _text(message: BaseMessage) -> str:
     return "".join(
         block.get("text", "") for block in content if isinstance(block, dict) and block.get("type") == "text"
     )
+
+
+def _usage(node: str, response: BaseMessage) -> list[dict]:
+    """The tokens one LLM call consumed (from the message's usage_metadata); empty when the provider gave none."""
+    usage = getattr(response, "usage_metadata", None)
+    if not usage:
+        return []
+    input_tokens, output_tokens = usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+    return [
+        {
+            "node": node,
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "total_tokens": usage.get("total_tokens") or input_tokens + output_tokens,
+        }
+    ]
 
 
 def _to_chat(history: list[dict]) -> list[BaseMessage]:
@@ -67,12 +85,18 @@ def _scope_note(last: dict) -> list[BaseMessage]:
     ]
 
 
-def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: str | None = None):
+def build_graph(
+    llm, client: BackendClient, storage, run_id: str, user_email: str | None = None, usage_sink: list | None = None
+):
     """START -> load_history -> load_catalog -> plan -> agent <-> tools -> END.
 
     Input: {"conversation_id": ...}. The graph reads the conversation and the analyses of the files in scope
     itself, drafts a plan for the last user message, then answers it, searching the analyses with tools as
-    needed. `llm` needs `.invoke(messages)` and `.bind_tools(tools)`."""
+    needed. `llm` needs `.invoke(messages)` and `.bind_tools(tools)`.
+
+    `usage_sink` receives the tokens of every LLM call as it happens (also in `token_usage` of the state), so they
+    are known even when a later step raises and the graph never returns its state."""
+    sink = usage_sink if usage_sink is not None else []
     holder: dict[str, Catalog] = {}
 
     def get_account() -> Account:
@@ -96,6 +120,11 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
     tools_by_name = {tool.name: tool for tool in tools}
     llm_with_tools = llm.bind_tools(tools)
 
+    def usage(node: str, response: BaseMessage) -> list[dict]:
+        calls = _usage(node, response)
+        sink.extend(calls)
+        return calls
+
     def load_history(state: AgentState) -> AgentState:
         messages = client.messages(state["conversation_id"])
         history = [m for m in messages if m["role"] in ("user", "assistant") and m["content"]]
@@ -118,9 +147,10 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
         history = state["history"]
         system = SystemMessage(PLAN_SYSTEM.format(overview=state["overview"]))
         response = llm.invoke([system, *_to_chat(history), *_scope_note(history[-1])])
+        used = usage("plan", response)
         plan_text = _text(response).strip()
         logger.info("Plan for conversation %s:\n%s", state["conversation_id"], plan_text)
-        return {"plan": plan_text}
+        return {"plan": plan_text, "token_usage": used}
 
     def agent(state: AgentState) -> AgentState:
         history, scratch, steps = state["history"], state.get("scratch", []), state.get("steps", 0)
@@ -130,12 +160,13 @@ def build_graph(llm, client: BackendClient, storage, run_id: str, user_email: st
             response = llm.invoke([*messages, SystemMessage(FORCE_ANSWER)])  # no tools: it must conclude
         else:
             response = llm_with_tools.invoke(messages)
-            if getattr(response, "tool_calls", None):
-                return {"scratch": [response], "steps": steps + 1}
+        used = usage("agent", response)  # before anything below can raise: these tokens were spent
+        if steps < MAX_TOOL_STEPS and getattr(response, "tool_calls", None):
+            return {"scratch": [response], "steps": steps + 1, "token_usage": used}
         text = _text(response).strip()
         if not text:
             raise ValueError("The model returned an empty answer")
-        return {"answer": with_missing_charts(text, charts_made)}
+        return {"answer": with_missing_charts(text, charts_made), "token_usage": used}
 
     def run_tools(state: AgentState) -> AgentState:
         results, log = [], []
