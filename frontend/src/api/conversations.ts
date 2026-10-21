@@ -1,5 +1,5 @@
 import { apiFetch, jsonBody } from '@/lib/api'
-import type { Conversation, Feedback, Message, MessageScope, Run, RunStatus } from '@/types/conversation'
+import type { Conversation, Feedback, Message, MessageScope, Run, RunStatus, TokenUsage } from '@/types/conversation'
 
 interface ConversationDto {
   id: string
@@ -17,6 +17,7 @@ interface MessageDto {
     plan: string
     files: { file_id: string; file_name: string; collection_name: string }[]
     steps: { tool: string; arguments: Record<string, unknown>; output: string }[]
+    usage?: TokenUsage | null
   } | null
   feedback?: Feedback | null
 }
@@ -42,6 +43,7 @@ const toMessage = (dto: MessageDto): Message[] =>
                 plan: dto.trace.plan,
                 files: dto.trace.files.map((f) => ({ id: f.file_id, name: f.file_name, collection: f.collection_name })),
                 steps: dto.trace.steps,
+                usage: dto.trace.usage ?? null,
               }
             : null,
           feedback: dto.feedback ?? null,
