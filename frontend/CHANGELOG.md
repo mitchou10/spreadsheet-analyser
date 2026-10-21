@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.10.0...v0.11.0) (2026-10-21)
+
+
+### Features
+
+* **frontend:** add the water bottles that fill with the tokens consumed ([c12b323](https://github.com/mitchou10/spreadsheet-analyser/commit/c12b323044430e62e0911edfe6dd1387ff1f6d63))
+* **frontend:** show the water bottles on my consumption and in the admin, with a 1 year period ([645135f](https://github.com/mitchou10/spreadsheet-analyser/commit/645135fcc00be558dee866dbff885b91c069d81f))
+
 ## [0.10.0](https://github.com/mitchou10/spreadsheet-analyser/compare/v0.9.0...v0.10.0) (2026-10-21)
 
 
