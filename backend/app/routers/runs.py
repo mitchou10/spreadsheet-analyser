@@ -1,7 +1,7 @@
 import uuid
 from dataclasses import asdict
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 
 from app.dependencies import (
     ActorDep,
@@ -24,6 +24,7 @@ from app.schemas import (
     RunContextOut,
     RunFailIn,
     RunOut,
+    RunUsageIn,
     ScopeFileOut,
     UserCollectionsOut,
 )
@@ -72,6 +73,15 @@ async def complete_run(run_id: uuid.UUID, body: RunCompleteIn, service: RunServi
     return RunOut.model_validate(
         await service.complete(run_id, body.content, body.trace.model_dump() if body.trace else None)
     )
+
+
+@internal_router.post(
+    "/runs/{run_id}/usage",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Tokens consumed by the run's LLM calls, whatever the run's final status",
+)
+async def record_run_usage(run_id: uuid.UUID, body: RunUsageIn, service: RunServiceDep) -> None:
+    await service.record_usage(run_id, [call.model_dump() for call in body.calls])
 
 
 @internal_router.post("/runs/{run_id}/fail", summary="Mark the run failed")

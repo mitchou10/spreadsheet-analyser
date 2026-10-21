@@ -9,6 +9,7 @@ from app.models.file import File
 from app.models.message import Message, MessageRole, message_collections, message_files
 from app.models.run import ACTIVE_RUN_STATUSES, Run, RunStatus
 from app.models.sql_query import SqlQuery, SqlQueryStatus
+from app.models.token_usage import TokenUsage
 
 __all__ = [
     "ACTIVE_RUN_STATUSES",
@@ -16,6 +17,7 @@ __all__ = [
     "RunStatus",
     "SqlQuery",
     "SqlQueryStatus",
+    "TokenUsage",
     "DEFAULT_CONVERSATION_TITLE",
     "AccessCollection",
     "Analysis",

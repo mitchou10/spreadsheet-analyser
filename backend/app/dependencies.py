@@ -24,6 +24,7 @@ from app.services import (
 )
 from app.services.dispatcher import CeleryRunDispatcher, RunDispatcher
 from app.services.models import ModelCatalog
+from app.services.usage import UsageService
 
 
 def get_actor(user: Annotated[RequestContext, Depends(get_current_user)]) -> Actor:
@@ -162,3 +163,10 @@ def get_chart_service(
 
 
 ChartServiceDep = Annotated[ChartService, Depends(get_chart_service)]
+
+
+def get_usage_service(session: SessionDep) -> UsageService:
+    return UsageService(session)
+
+
+UsageServiceDep = Annotated[UsageService, Depends(get_usage_service)]
